@@ -61,14 +61,19 @@ type DatabaseConfig struct {
 
 // InventoryDBConfig holds inventory database settings.
 type InventoryDBConfig struct {
-	Type     string `envconfig:"INVENTORY_DB_TYPE" default:"sqlite"` // sqlite or postgres
+	Type     string `envconfig:"INVENTORY_DB_TYPE" default:"sqlite"` // sqlite, postgres, or mongodb
 	Path     string `envconfig:"INVENTORY_DB_PATH" default:"./data/inventory.db"`
+	// PostgreSQL settings
 	Host     string `envconfig:"INVENTORY_DB_HOST" default:"localhost"`
 	Port     int    `envconfig:"INVENTORY_DB_PORT" default:"5432"`
 	Name     string `envconfig:"INVENTORY_DB_NAME" default:"vinzhub"`
 	User     string `envconfig:"INVENTORY_DB_USER" default:"postgres"`
 	Password string `envconfig:"INVENTORY_DB_PASS" default:""`
 	SSLMode  string `envconfig:"INVENTORY_DB_SSLMODE" default:"disable"`
+	// MongoDB settings
+	MongoURI        string `envconfig:"MONGODB_URI" default:""`
+	MongoDatabase   string `envconfig:"MONGODB_DATABASE" default:"vinzhub"`
+	MongoCollection string `envconfig:"MONGODB_COLLECTION" default:"fishit_inventory"`
 }
 
 // PostgresDSN returns the PostgreSQL connection string.

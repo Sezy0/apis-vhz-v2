@@ -34,6 +34,18 @@ func main() {
 	// Initialize inventory repository based on config
 	var inventoryRepo repository.InventoryRepository
 	switch cfg.InventoryDB.Type {
+	case "mongodb", "mongo":
+		mongoRepo, err := repository.NewMongoDBInventoryRepository(
+			cfg.InventoryDB.MongoURI,
+			cfg.InventoryDB.MongoDatabase,
+			cfg.InventoryDB.MongoCollection,
+		)
+		if err != nil {
+			log.Fatalf("Failed to initialize MongoDB: %v", err)
+		}
+		defer mongoRepo.Close()
+		inventoryRepo = mongoRepo
+		log.Println("MongoDB inventory repository initialized")
 	case "postgres", "postgresql":
 		pgRepo, err := repository.NewPostgresInventoryRepository(cfg.InventoryDB.PostgresDSN())
 		if err != nil {
