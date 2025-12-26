@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VinzHub API v2 - Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg: #09090b;
@@ -392,6 +393,18 @@
             </div>
         </div>
 
+        <!-- Charts Section -->
+        <div class="grid grid-2" style="margin-bottom: 16px;">
+            <div class="card" style="padding: 16px;">
+                <div class="table-head" style="border: none; padding: 0 0 12px 0;">📈 Memory Usage (MB)</div>
+                <canvas id="memoryChart" height="120"></canvas>
+            </div>
+            <div class="card" style="padding: 16px;">
+                <div class="table-head" style="border: none; padding: 0 0 12px 0;">📊 Pending Items</div>
+                <canvas id="pendingChart" height="120"></canvas>
+            </div>
+        </div>
+
         <footer>
             Auto-refresh 5s • Last: <span id="time">--</span>
         </footer>
@@ -400,6 +413,85 @@
     <script>
         // Security: Login key stored in sessionStorage, requires login
         let LOGIN_KEY = sessionStorage.getItem('admin_key') || '';
+
+        // Chart configuration
+        const MAX_DATA_POINTS = 20;
+        const memoryHistory = [];
+        const pendingHistory = [];
+        const timeLabels = [];
+        let memoryChart = null;
+        let pendingChart = null;
+
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    ticks: { color: '#71717a', maxRotation: 0, autoSkip: true, maxTicksLimit: 5 },
+                    grid: { color: 'rgba(113,113,122,0.1)' }
+                },
+                y: {
+                    ticks: { color: '#71717a' },
+                    grid: { color: 'rgba(113,113,122,0.2)' },
+                    beginAtZero: true
+                }
+            },
+            elements: { line: { tension: 0.3, borderWidth: 2 }, point: { radius: 0 } }
+        };
+
+        function initCharts() {
+            const memCtx = document.getElementById('memoryChart').getContext('2d');
+            memoryChart = new Chart(memCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Memory (MB)',
+                        data: memoryHistory,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        fill: true
+                    }]
+                },
+                options: chartOptions
+            });
+
+            const pendCtx = document.getElementById('pendingChart').getContext('2d');
+            pendingChart = new Chart(pendCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Pending',
+                        data: pendingHistory,
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249,115,22,0.1)',
+                        fill: true
+                    }]
+                },
+                options: chartOptions
+            });
+        }
+
+        function updateCharts(memMB, pending) {
+            const now = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            timeLabels.push(now);
+            memoryHistory.push(memMB);
+            pendingHistory.push(pending);
+
+            if (timeLabels.length > MAX_DATA_POINTS) {
+                timeLabels.shift();
+                memoryHistory.shift();
+                pendingHistory.shift();
+            }
+
+            if (memoryChart && pendingChart) {
+                memoryChart.update('none');
+                pendingChart.update('none');
+            }
+        }
 
         // Password login if not authenticated
         async function verifyLogin(key) {
@@ -432,6 +524,7 @@
                     return;
                 }
             }
+            initCharts();
             load();
             setInterval(load, 5000);
         }
@@ -460,6 +553,11 @@
         }
 
         function render(d) {
+            // Update charts with real-time data
+            const memMB = d.memory?.heap_alloc_mb || 0;
+            const pending = d.redis_buffer?.pending_items || 0;
+            updateCharts(memMB, pending);
+
             // Cards
             document.getElementById('redis').textContent =
                 d.redis_buffer?.pending_items?.toLocaleString() ?? 'N/A';
@@ -518,9 +616,8 @@
             }
             document.getElementById('db').innerHTML = db || row('No data', '--');
 
-            // Flush Progress
+            // Flush Progress (reusing pending from chart update above)
             let flush = '';
-            const pending = d.redis_buffer?.pending_items || 0;
             const batchSize = 200;  // Match MaxBatchSize in redis.go
             const flushInterval = 30; // seconds
             const batches = Math.ceil(pending / batchSize);
