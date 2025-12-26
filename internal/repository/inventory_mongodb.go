@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -66,19 +67,25 @@ func NewMongoDBInventoryRepository(uri, database, collection string) (*MongoDBIn
 
 // InventoryDocument represents a document in MongoDB.
 type InventoryDocument struct {
-	RobloxUserID string    `bson:"roblox_user_id"`
-	KeyAccountID int64     `bson:"key_account_id,omitempty"`
-	InventoryJSON bson.Raw `bson:"inventory_json"`
-	SyncedAt     time.Time `bson:"synced_at"`
+	RobloxUserID  string      `bson:"roblox_user_id"`
+	KeyAccountID  int64       `bson:"key_account_id,omitempty"`
+	InventoryJSON interface{} `bson:"inventory_json"` // Stores parsed JSON as BSON
+	SyncedAt      time.Time   `bson:"synced_at"`
 }
 
 // UpsertRawInventory inserts or updates raw JSON inventory.
 func (r *MongoDBInventoryRepository) UpsertRawInventory(ctx context.Context, keyAccountID int64, robloxUserID string, rawJSON []byte) error {
+	// Parse JSON to interface{} for proper BSON conversion
+	var inventoryData interface{}
+	if err := json.Unmarshal(rawJSON, &inventoryData); err != nil {
+		return fmt.Errorf("failed to parse inventory JSON: %w", err)
+	}
+
 	filter := bson.M{"roblox_user_id": robloxUserID}
 	update := bson.M{
 		"$set": bson.M{
 			"key_account_id":  keyAccountID,
-			"inventory_json":  bson.Raw(rawJSON),
+			"inventory_json":  inventoryData,
 			"synced_at":       time.Now(),
 		},
 	}
@@ -99,11 +106,18 @@ func (r *MongoDBInventoryRepository) BatchUpsertRawInventory(ctx context.Context
 
 	models := make([]mongo.WriteModel, len(items))
 	for i, item := range items {
+		// Parse JSON to interface{} for proper BSON conversion
+		var inventoryData interface{}
+		if err := json.Unmarshal(item.RawJSON, &inventoryData); err != nil {
+			log.Printf("[MongoDB] Warning: failed to parse JSON for %s: %v", item.RobloxUserID, err)
+			continue
+		}
+
 		filter := bson.M{"roblox_user_id": item.RobloxUserID}
 		update := bson.M{
 			"$set": bson.M{
 				"key_account_id":  item.KeyAccountID,
-				"inventory_json":  bson.Raw(item.RawJSON),
+				"inventory_json":  inventoryData,
 				"synced_at":       item.SyncedAt,
 			},
 		}
@@ -133,7 +147,13 @@ func (r *MongoDBInventoryRepository) GetRawInventory(ctx context.Context, roblox
 		return nil, nil, fmt.Errorf("failed to get inventory: %w", err)
 	}
 
-	return []byte(doc.InventoryJSON), &doc.SyncedAt, nil
+	// Convert BSON back to JSON
+	jsonBytes, err := json.Marshal(doc.InventoryJSON)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal inventory to JSON: %w", err)
+	}
+
+	return jsonBytes, &doc.SyncedAt, nil
 }
 
 // GetStats returns statistics about the inventory collection.
