@@ -14,7 +14,7 @@ import (
 
 // Buffer configuration
 const (
-	MaxBatchSize       = 20  // Reduced for slow cloud DB (Aiven)
+	MaxBatchSize       = 300  // Increased for fast MongoDB
 	FlushTimeout       = 120 * time.Second  // 2 minutes for slow connections
 	StaleDataThreshold = 1 * time.Hour
 	CleanupInterval    = 5 * time.Minute
