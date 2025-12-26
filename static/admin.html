@@ -398,13 +398,32 @@
     </div>
 
     <script>
-        const API_KEY = 'vinzhub_sk_live_8f7g6h5j4k3l2m1n0p9o';
+        // Security: API key stored in sessionStorage, requires login
+        let API_KEY = sessionStorage.getItem('admin_key') || '';
+
+        // Password login if not authenticated
+        if (!API_KEY) {
+            const pwd = prompt('Enter Admin Password:');
+            if (pwd) {
+                API_KEY = pwd;
+                sessionStorage.setItem('admin_key', pwd);
+            } else {
+                document.body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:50px;font-size:20px">Access Denied</div>';
+                throw new Error('Access Denied');
+            }
+        }
 
         async function load() {
             try {
                 const res = await fetch('/api/v1/admin/stats', {
                     headers: { 'X-API-Key': API_KEY }
                 });
+                if (res.status === 401) {
+                    sessionStorage.removeItem('admin_key');
+                    alert('Invalid API Key. Page will reload.');
+                    location.reload();
+                    return;
+                }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const { data } = await res.json();
                 render(data);
@@ -427,12 +446,20 @@
                 d.memory ? `${d.memory.heap_alloc_mb.toFixed(1)} MB` : '--';
             document.getElementById('uptime').textContent = d.uptime_human || '--';
 
-            // Connections
+            // Connections - show database type
+            const dbType = d.db_type || 'unknown';
+            const dbTypeDisplay = {
+                'sqlite': 'SQLite',
+                'postgres': 'PostgreSQL',
+                'postgresql': 'PostgreSQL',
+                'mongodb': 'MongoDB',
+                'mongo': 'MongoDB'
+            }[dbType] || dbType.toUpperCase();
+
             let conn = '';
             conn += row('Redis', d.redis_buffer?.status || 'N/A',
                 d.redis_buffer?.status === 'connected' ? 'green' : 'orange');
-            conn += row('SQLite', d.sqlite?.status || 'N/A',
-                d.sqlite?.status === 'connected' ? 'green' : 'orange');
+            conn += row('Database', `${dbTypeDisplay} ✓`, 'cyan');
             document.getElementById('conn').innerHTML = conn;
 
             // Runtime

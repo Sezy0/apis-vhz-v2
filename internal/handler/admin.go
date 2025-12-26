@@ -14,6 +14,7 @@ import (
 type AdminHandler struct {
 	redisBuffer   *cache.RedisInventoryBuffer
 	inventoryRepo repository.InventoryRepository // Interface instead of concrete type
+	dbType        string                          // Database type: sqlite, postgres, mongodb
 	startTime     time.Time
 }
 
@@ -21,10 +22,12 @@ type AdminHandler struct {
 func NewAdminHandler(
 	redisBuffer *cache.RedisInventoryBuffer,
 	inventoryRepo repository.InventoryRepository,
+	dbType string,
 ) *AdminHandler {
 	return &AdminHandler{
 		redisBuffer:   redisBuffer,
 		inventoryRepo: inventoryRepo,
+		dbType:        dbType,
 		startTime:     time.Now(),
 	}
 }
@@ -38,6 +41,7 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	stats["uptime_seconds"] = int64(time.Since(h.startTime).Seconds())
 	stats["uptime_human"] = time.Since(h.startTime).Round(time.Second).String()
 	stats["server_time"] = time.Now().Format(time.RFC3339)
+	stats["db_type"] = h.dbType // sqlite, postgres, or mongodb
 
 	// Memory stats
 	var memStats runtime.MemStats

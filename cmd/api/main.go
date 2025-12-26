@@ -142,7 +142,7 @@ func main() {
 	// Initialize handlers
 	healthHandler := handler.New()
 	inventoryHandler := handler.NewInventoryHandler(inventoryService)
-	adminHandler := handler.NewAdminHandler(redisBuffer, inventoryRepo)
+	adminHandler := handler.NewAdminHandler(redisBuffer, inventoryRepo, cfg.InventoryDB.Type)
 
 	var authHandler *handler.AuthHandler
 	if tokenService != nil && keyAccountRepo != nil {
