@@ -48,6 +48,16 @@ func NewAuthMiddleware(cfg AuthConfig) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			
+			// Allow admin endpoints with X-Login-Key (handled by AdminHandler)
+			if strings.HasPrefix(r.URL.Path, "/api/v1/admin") {
+				// /admin/login and /admin/stats with X-Login-Key bypass regular auth
+				loginKey := r.Header.Get("X-Login-Key")
+				if loginKey != "" || r.URL.Path == "/api/v1/admin/login" {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
 
 			// Try X-Token first (session tokens)
 			token := r.Header.Get("X-Token")

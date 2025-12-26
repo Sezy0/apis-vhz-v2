@@ -37,6 +37,7 @@ type AppConfig struct {
 	Environment string `envconfig:"APP_ENV" default:"development"`
 	Debug       bool   `envconfig:"APP_DEBUG" default:"false"`
 	Version     string `envconfig:"APP_VERSION" default:"2.0.0"`
+	LoginKey    string `envconfig:"LOGIN_KEY" default:""`  // Admin dashboard login key
 }
 
 // CacheConfig holds cache settings.

@@ -30,7 +30,7 @@ func New(cfg Config) *chi.Mux {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-API-Key", "X-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-API-Key", "X-Token", "X-Login-Key"},
 		ExposedHeaders:   []string{"X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -71,6 +71,7 @@ func New(cfg Config) *chi.Mux {
 			r.Route("/admin", func(r chi.Router) {
 				r.Get("/stats", cfg.AdminHandler.GetStats)
 				r.Get("/health", cfg.AdminHandler.GetHealth)
+				r.Post("/login", cfg.AdminHandler.VerifyLogin)
 			})
 		}
 	})

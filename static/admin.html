@@ -398,29 +398,52 @@
     </div>
 
     <script>
-        // Security: API key stored in sessionStorage, requires login
-        let API_KEY = sessionStorage.getItem('admin_key') || '';
+        // Security: Login key stored in sessionStorage, requires login
+        let LOGIN_KEY = sessionStorage.getItem('admin_key') || '';
 
         // Password login if not authenticated
-        if (!API_KEY) {
-            const pwd = prompt('Enter Admin Password:');
-            if (pwd) {
-                API_KEY = pwd;
-                sessionStorage.setItem('admin_key', pwd);
-            } else {
-                document.body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:50px;font-size:20px">Access Denied</div>';
-                throw new Error('Access Denied');
+        async function verifyLogin(key) {
+            try {
+                const res = await fetch('/api/v1/admin/login', {
+                    method: 'POST',
+                    headers: { 'X-Login-Key': key }
+                });
+                return res.ok;
+            } catch {
+                return false;
             }
+        }
+
+        async function init() {
+            if (!LOGIN_KEY) {
+                const pwd = prompt('Enter Admin Password:');
+                if (pwd) {
+                    const valid = await verifyLogin(pwd);
+                    if (valid) {
+                        LOGIN_KEY = pwd;
+                        sessionStorage.setItem('admin_key', pwd);
+                    } else {
+                        alert('Invalid password!');
+                        location.reload();
+                        return;
+                    }
+                } else {
+                    document.body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:50px;font-size:20px">Access Denied</div>';
+                    return;
+                }
+            }
+            load();
+            setInterval(load, 5000);
         }
 
         async function load() {
             try {
                 const res = await fetch('/api/v1/admin/stats', {
-                    headers: { 'X-API-Key': API_KEY }
+                    headers: { 'X-Login-Key': LOGIN_KEY }
                 });
                 if (res.status === 401) {
                     sessionStorage.removeItem('admin_key');
-                    alert('Invalid API Key. Page will reload.');
+                    alert('Session expired. Page will reload.');
                     location.reload();
                     return;
                 }
@@ -533,8 +556,7 @@
             el.innerHTML = `<div class="dot"></div><span>${msg}</span>`;
         }
 
-        load();
-        setInterval(load, 5000);
+        init();
     </script>
 </body>
 

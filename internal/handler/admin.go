@@ -15,6 +15,7 @@ type AdminHandler struct {
 	redisBuffer   *cache.RedisInventoryBuffer
 	inventoryRepo repository.InventoryRepository // Interface instead of concrete type
 	dbType        string                          // Database type: sqlite, postgres, mongodb
+	loginKey      string                          // Admin dashboard login key
 	startTime     time.Time
 }
 
@@ -23,11 +24,13 @@ func NewAdminHandler(
 	redisBuffer *cache.RedisInventoryBuffer,
 	inventoryRepo repository.InventoryRepository,
 	dbType string,
+	loginKey string,
 ) *AdminHandler {
 	return &AdminHandler{
 		redisBuffer:   redisBuffer,
 		inventoryRepo: inventoryRepo,
 		dbType:        dbType,
+		loginKey:      loginKey,
 		startTime:     time.Now(),
 	}
 }
@@ -111,4 +114,21 @@ func (h *AdminHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
 	})
+}
+
+// VerifyLogin handles POST /api/v1/admin/login - verifies login key
+func (h *AdminHandler) VerifyLogin(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("X-Login-Key")
+	if key == "" {
+		key = r.Header.Get("X-API-Key") // Fallback to X-API-Key header
+	}
+	
+	if key == "" || key != h.loginKey {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write([]byte(`{"success":false,"error":"invalid login key"}`))
+		return
+	}
+	
+	response.OK(w, map[string]bool{"valid": true})
 }
