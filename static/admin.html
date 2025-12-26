@@ -384,18 +384,11 @@
             </div>
         </div>
 
-        <!-- API Endpoints -->
+        <!-- Redis Flush Progress -->
         <div class="card card-sm" style="margin-bottom: 16px;">
-            <div class="table-head" style="border: none; padding: 0 0 8px 0;">🚀 API Endpoints</div>
-            <div class="endpoints">
-                <span class="ep get">GET /api/v1/health</span>
-                <span class="ep get">GET /api/v1/ready</span>
-                <span class="ep post">POST /api/v1/auth/token</span>
-                <span class="ep post">POST /api/v1/auth/revoke</span>
-                <span class="ep post">POST /api/v1/auth/refresh</span>
-                <span class="ep post">POST /api/v1/inventory/{id}/sync</span>
-                <span class="ep get">GET /api/v1/inventory/{id}</span>
-                <span class="ep get">GET /api/v1/admin/stats</span>
+            <div class="table-head" style="border: none; padding: 0 0 8px 0;">🔄 Redis → Database Sync</div>
+            <div id="flush-progress">
+                <div class="row"><span class="row-key">Loading...</span></div>
             </div>
         </div>
 
@@ -474,6 +467,27 @@
                 db += row('Buffer Pending', d.redis_buffer.pending_items);
             }
             document.getElementById('db').innerHTML = db || row('No data', '--');
+
+            // Flush Progress
+            let flush = '';
+            const pending = d.redis_buffer?.pending_items || 0;
+            const batchSize = 20;
+            const flushInterval = 30; // seconds
+            const batches = Math.ceil(pending / batchSize);
+            const etaSeconds = batches * flushInterval;
+            const etaMin = Math.floor(etaSeconds / 60);
+            const etaSec = etaSeconds % 60;
+
+            flush += row('Pending Items', pending, pending > 0 ? 'orange' : 'green');
+            flush += row('Batch Size', batchSize);
+            flush += row('Flush Interval', `${flushInterval}s`);
+            flush += row('Batches Needed', batches);
+            if (pending > 0) {
+                flush += row('Est. Time Left', `${etaMin}m ${etaSec}s`, 'cyan');
+            } else {
+                flush += row('Status', 'All synced ✓', 'green');
+            }
+            document.getElementById('flush-progress').innerHTML = flush;
 
             // Time
             document.getElementById('time').textContent = new Date().toLocaleTimeString();
