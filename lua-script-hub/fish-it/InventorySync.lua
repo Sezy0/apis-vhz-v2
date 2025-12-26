@@ -26,7 +26,7 @@ local InventorySync = {}
 --------------------------------------------------------------------------------
 
 local Config = {
-    APIBase = "https://sandbox.vinzhub.com/api/v1",
+    APIBase = "https://api-v2.vinzhub.com/api/v1",
     Token = nil,            -- Session token (set via SetToken())
     SyncInterval = 300,     -- Seconds between auto-sync (5 min to reduce DB load)
     Debug = false,          -- Enable debug logging
@@ -672,10 +672,12 @@ function InventorySync.Login(licenseKey, manualHwid)
     
     if success and response.StatusCode == 200 then
         local data = HttpService:JSONDecode(response.Body)
-        if data and data.token then
-            Config.Token = data.token
+        -- API v2 returns {success: true, data: {token, expires_in}}
+        local tokenData = data.data or data  -- Support both wrapped and unwrapped
+        if tokenData and tokenData.token then
+            Config.Token = tokenData.token
             if Config.Debug then
-                print("[InventorySync] Login Successful! Token expires in:", data.expires_in)
+                print("[InventorySync] Login Successful! Token expires in:", tokenData.expires_in)
             end
             return true
         else

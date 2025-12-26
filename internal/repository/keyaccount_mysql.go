@@ -49,36 +49,15 @@ func (r *MySQLKeyAccountRepository) ValidateKeyAccount(ctx context.Context, keyA
 }
 
 // ValidateKeyAndHWID validates a key+hwid+roblox_id combination for token generation.
-// Returns key_account details if valid, error otherwise.
+// If key is valid but key_account doesn't exist, auto-creates one.
 func (r *MySQLKeyAccountRepository) ValidateKeyAndHWID(ctx context.Context, key, hwid, robloxUserID string) (*model.KeyAccountValidation, error) {
 	log.Printf("[KeyAccountRepository] Validating key for roblox_id=%s", robloxUserID)
 
-	query := `
-		SELECT 
-			ka.id as key_account_id,
-			ka.key_id,
-			ka.roblox_user_id,
-			ka.roblox_username,
-			ka.hwid,
-			k.status as key_status
-		FROM key_accounts ka
-		JOIN ` + "`keys`" + ` k ON ka.key_id = k.id
-		WHERE k.` + "`key`" + ` = ?
-		  AND ka.roblox_user_id = ?
-		  AND ka.is_active = 1
-		  AND LOWER(k.status) = 'active'
-		LIMIT 1`
-
-	var result model.KeyAccountValidation
-	err := r.db.QueryRowContext(ctx, query, key, robloxUserID).Scan(
-		&result.KeyAccountID,
-		&result.KeyID,
-		&result.RobloxUserID,
-		&result.RobloxUsername,
-		&result.HWID,
-		&result.KeyStatus,
-	)
-
+	// Step 1: Check if key exists and is active
+	var keyID int64
+	var keyStatus string
+	keyQuery := "SELECT id, status FROM `keys` WHERE `key` = ? LIMIT 1"
+	err := r.db.QueryRowContext(ctx, keyQuery, key).Scan(&keyID, &keyStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("invalid key or account not found")
@@ -86,14 +65,62 @@ func (r *MySQLKeyAccountRepository) ValidateKeyAndHWID(ctx context.Context, key,
 		return nil, fmt.Errorf("failed to validate key: %w", err)
 	}
 
-	// Validate HWID if already set (not empty)
+	if keyStatus != "active" {
+		return nil, fmt.Errorf("key is not active (status: %s)", keyStatus)
+	}
+
+	// Step 2: Check if key_account exists for this key+roblox_id
+	var result model.KeyAccountValidation
+	accountQuery := `
+		SELECT id, key_id, roblox_user_id, COALESCE(roblox_username, ''), COALESCE(hwid, '')
+		FROM key_accounts 
+		WHERE key_id = ? AND roblox_user_id = ? AND is_active = 1
+		LIMIT 1`
+	
+	err = r.db.QueryRowContext(ctx, accountQuery, keyID, robloxUserID).Scan(
+		&result.KeyAccountID,
+		&result.KeyID,
+		&result.RobloxUserID,
+		&result.RobloxUsername,
+		&result.HWID,
+	)
+
+	if err == sql.ErrNoRows {
+		// Step 3: Auto-create key_account if it doesn't exist
+		log.Printf("[KeyAccountRepository] Auto-creating key_account for key_id=%d, roblox_id=%s", keyID, robloxUserID)
+		
+		insertQuery := `
+			INSERT INTO key_accounts (key_id, roblox_user_id, hwid, is_active, first_used_at, last_used_at)
+			VALUES (?, ?, ?, 1, NOW(), NOW())`
+		
+		res, err := r.db.ExecContext(ctx, insertQuery, keyID, robloxUserID, hwid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create key account: %w", err)
+		}
+		
+		newID, _ := res.LastInsertId()
+		result = model.KeyAccountValidation{
+			KeyAccountID: newID,
+			KeyID:        keyID,
+			RobloxUserID: robloxUserID,
+			HWID:         hwid,
+			KeyStatus:    keyStatus,
+		}
+		return &result, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to query key account: %w", err)
+	}
+
+	result.KeyStatus = keyStatus
+
+	// Validate HWID if already set
 	if result.HWID != "" && result.HWID != hwid {
 		return nil, fmt.Errorf("hwid mismatch")
 	}
 
-	// Update HWID if not set yet
-	if result.HWID == "" && hwid != "" {
-		updateQuery := `UPDATE key_accounts SET hwid = ? WHERE id = ?`
+	// Update HWID and last_used_at
+	if hwid != "" {
+		updateQuery := `UPDATE key_accounts SET hwid = ?, last_used_at = NOW() WHERE id = ?`
 		_, err = r.db.ExecContext(ctx, updateQuery, hwid, result.KeyAccountID)
 		if err != nil {
 			log.Printf("[KeyAccountRepository] Failed to update HWID: %v", err)
