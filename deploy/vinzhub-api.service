@@ -1,0 +1,20 @@
+[Unit]
+Description=VinzHub REST API v2
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vinzhub
+ExecStart=/opt/vinzhub/vinzhub-api
+Restart=always
+RestartSec=5
+Environment=APP_ENV=production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vinzhub-api
+
+[Install]
+WantedBy=multi-user.target

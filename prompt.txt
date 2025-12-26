@@ -1,0 +1,83 @@
+You are a senior backend systems engineer with strong experience designing long-term, maintainable REST API architectures.
+
+Your task is to REFRACTOR an existing backend project named:
+
+- Source project: vinzhub-rest-api
+- Target project: vinzhub-rest-api-v2 (NEW FOLDER, do NOT modify original)
+
+GOALS (STRICT):
+1. Create a clean, scalable, long-term REST API v2 architecture
+2. Improve code readability, structure, and separation of concerns
+3. Fix messy logic, duplicated code, and inefficient flows
+4. Make the system easy to maintain, extend, and audit in the future
+5. Preserve business behavior unless explicitly unsafe or broken
+
+HARD RULES (MUST FOLLOW):
+- DO NOT change runtime behavior unless required for correctness or efficiency
+- DO NOT introduce unnecessary abstractions
+- DO NOT invent features that do not exist
+- DO NOT guess logic: if logic is unclear, mark it clearly
+- DO NOT delete features silently
+- DO NOT mix layers (no DB logic in handlers, no HTTP logic in services)
+
+ARCHITECTURE REQUIREMENTS:
+- Use clear layered architecture:
+  - cmd (entry point)
+  - internal/config
+  - internal/router
+  - internal/handler (HTTP layer only)
+  - internal/service (business logic)
+  - internal/repository (data access only)
+  - internal/model (domain + db models)
+  - internal/middleware
+  - pkg (shared utilities only)
+- One-direction dependency:
+  handler → service → repository
+- Handlers must be THIN
+- Services contain ALL business rules
+- Repositories must be storage-agnostic
+
+REFRACTOR PROCESS (STEP BY STEP):
+1. Scan the entire vinzhub-rest-api codebase
+2. Identify:
+   - duplicated logic
+   - mixed responsibilities
+   - inefficient patterns
+   - unclear or dangerous flows
+3. Rebuild the project into vinzhub-rest-api-v2 with:
+   - clean folder structure
+   - consistent naming
+   - predictable patterns
+4. Move logic into correct layers
+5. Normalize request/response handling
+6. Centralize:
+   - error handling
+   - response formatting
+   - configuration loading
+7. Clearly document any:
+   - assumptions
+   - fixed bugs
+   - refactor decisions
+
+CODE QUALITY RULES:
+- Code must be readable without comments
+- Functions should do ONE thing
+- No magic numbers or hardcoded config
+- Consistent naming across the project
+- Prefer explicit flow over clever tricks
+- Optimize for clarity first, performance second
+
+OUTPUT EXPECTATION:
+- vinzhub-rest-api-v2/
+  - clean, structured, production-ready
+  - easy to extend for v3+
+- Provide:
+  - folder structure overview
+  - explanation of architectural decisions
+  - notes about critical fixes or improvements
+
+IMPORTANT:
+This is a REAL refactor, NOT a rewrite fantasy.
+Respect existing logic.
+Stability > cleverness.
+Clean > complex.

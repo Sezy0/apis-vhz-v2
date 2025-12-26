@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VinzHub API v2 - Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #09090b;
+            --bg-card: #18181b;
+            --bg-hover: #27272a;
+            --border: #27272a;
+            --text: #fafafa;
+            --text-muted: #71717a;
+            --green: #22c55e;
+            --blue: #3b82f6;
+            --purple: #a855f7;
+            --orange: #f97316;
+            --red: #ef4444;
+            --cyan: #06b6d4;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .app {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .logo span {
+            color: var(--green);
+        }
+
+        .version {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            color: var(--text-muted);
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+
+        .status.ok {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--green);
+        }
+
+        .status.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--red);
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status.ok .dot {
+            background: var(--green);
+        }
+
+        .status.error .dot {
+            background: var(--red);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* Grid */
+        .grid {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        @media (max-width: 900px) {
+            .grid-4 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+
+            .grid-4,
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            transition: all 0.2s;
+        }
+
+        .card:hover {
+            background: var(--bg-hover);
+            border-color: #3f3f46;
+        }
+
+        .card-sm {
+            padding: 12px 16px;
+        }
+
+        .card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .card-icon {
+            font-size: 1rem;
+        }
+
+        .card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .card-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .green {
+            color: var(--green);
+        }
+
+        .blue {
+            color: var(--blue);
+        }
+
+        .purple {
+            color: var(--purple);
+        }
+
+        .orange {
+            color: var(--orange);
+        }
+
+        .cyan {
+            color: var(--cyan);
+        }
+
+        /* Tables */
+        .table-card {
+            overflow: hidden;
+        }
+
+        .table-head {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 16px;
+            font-size: 0.8rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .row:last-child {
+            border-bottom: none;
+        }
+
+        .row:hover {
+            background: var(--bg-hover);
+        }
+
+        .row-key {
+            color: var(--text-muted);
+        }
+
+        .row-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 16px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Error */
+        .error-box {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--red);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+        }
+
+        /* Endpoint badge */
+        .endpoints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .ep {
+            font-size: 0.65rem;
+            padding: 3px 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid var(--border);
+        }
+
+        .ep.get {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .ep.post {
+            border-color: var(--blue);
+            color: var(--blue);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <header>
+            <div class="logo">
+                ⚡ VinzHub <span>API</span>
+                <span class="version">v2.0.0</span>
+            </div>
+            <div id="status" class="status ok">
+                <div class="dot"></div>
+                <span>Loading...</span>
+            </div>
+        </header>
+
+        <div id="error"></div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-4">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">Redis Buffer</span>
+                    <span class="card-icon">📦</span>
+                </div>
+                <div class="card-value green" id="redis">--</div>
+                <div class="card-label">Pending Items</div>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">Inventories</span>
+                    <span class="card-icon">💾</span>
+                </div>
+                <div class="card-value blue" id="sqlite">--</div>
+                <div class="card-label">Total Stored</div>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">Memory</span>
+                    <span class="card-icon">🧠</span>
+                </div>
+                <div class="card-value purple" id="memory">--</div>
+                <div class="card-label">Heap Allocated</div>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">Uptime</span>
+                    <span class="card-icon">⏱️</span>
+                </div>
+                <div class="card-value orange" id="uptime">--</div>
+                <div class="card-label">Running</div>
+            </div>
+        </div>
+
+        <!-- Detail Tables -->
+        <div class="grid grid-2">
+            <div class="card table-card">
+                <div class="table-head">🔌 Connections</div>
+                <div id="conn">
+                    <div class="row"><span class="row-key">Loading...</span></div>
+                </div>
+            </div>
+            <div class="card table-card">
+                <div class="table-head">⚙️ Runtime</div>
+                <div id="runtime">
+                    <div class="row"><span class="row-key">Loading...</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card table-card">
+                <div class="table-head">💾 Memory Details</div>
+                <div id="mem-detail">
+                    <div class="row"><span class="row-key">Loading...</span></div>
+                </div>
+            </div>
+            <div class="card table-card">
+                <div class="table-head">📊 Database</div>
+                <div id="db">
+                    <div class="row"><span class="row-key">Loading...</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Endpoints -->
+        <div class="card card-sm" style="margin-bottom: 16px;">
+            <div class="table-head" style="border: none; padding: 0 0 8px 0;">🚀 API Endpoints</div>
+            <div class="endpoints">
+                <span class="ep get">GET /api/v1/health</span>
+                <span class="ep get">GET /api/v1/ready</span>
+                <span class="ep post">POST /api/v1/auth/token</span>
+                <span class="ep post">POST /api/v1/auth/revoke</span>
+                <span class="ep post">POST /api/v1/auth/refresh</span>
+                <span class="ep post">POST /api/v1/inventory/{id}/sync</span>
+                <span class="ep get">GET /api/v1/inventory/{id}</span>
+                <span class="ep get">GET /api/v1/admin/stats</span>
+            </div>
+        </div>
+
+        <footer>
+            Auto-refresh 5s • Last: <span id="time">--</span>
+        </footer>
+    </div>
+
+    <script>
+        const API_KEY = 'vinzhub_sk_live_8f7g6h5j4k3l2m1n0p9o';
+
+        async function load() {
+            try {
+                const res = await fetch('/api/v1/admin/stats', {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const { data } = await res.json();
+                render(data);
+                status('ok', 'Operational');
+                document.getElementById('error').innerHTML = '';
+            } catch (e) {
+                status('error', 'Error');
+                document.getElementById('error').innerHTML =
+                    `<div class="error-box">Failed: ${e.message}</div>`;
+            }
+        }
+
+        function render(d) {
+            // Cards
+            document.getElementById('redis').textContent =
+                d.redis_buffer?.pending_items?.toLocaleString() ?? 'N/A';
+            document.getElementById('sqlite').textContent =
+                d.sqlite?.total_inventories?.toLocaleString() ?? '0';
+            document.getElementById('memory').textContent =
+                d.memory ? `${d.memory.heap_alloc_mb.toFixed(1)} MB` : '--';
+            document.getElementById('uptime').textContent = d.uptime_human || '--';
+
+            // Connections
+            let conn = '';
+            conn += row('Redis', d.redis_buffer?.status || 'N/A',
+                d.redis_buffer?.status === 'connected' ? 'green' : 'orange');
+            conn += row('SQLite', d.sqlite?.status || 'N/A',
+                d.sqlite?.status === 'connected' ? 'green' : 'orange');
+            document.getElementById('conn').innerHTML = conn;
+
+            // Runtime
+            if (d.runtime) {
+                document.getElementById('runtime').innerHTML =
+                    row('Go', d.runtime.go_version) +
+                    row('OS/Arch', `${d.runtime.os}/${d.runtime.arch}`) +
+                    row('CPUs', d.runtime.cpus) +
+                    row('Goroutines', d.memory?.goroutines || '--');
+            }
+
+            // Memory Detail
+            if (d.memory) {
+                document.getElementById('mem-detail').innerHTML =
+                    row('Heap Alloc', `${d.memory.heap_alloc_mb.toFixed(2)} MB`) +
+                    row('Heap InUse', `${d.memory.heap_inuse_mb.toFixed(2)} MB`) +
+                    row('Sys Memory', `${d.memory.sys_mb.toFixed(2)} MB`) +
+                    row('Total Alloc', `${d.memory.total_alloc_mb.toFixed(2)} MB`) +
+                    row('GC Runs', d.memory.num_gc);
+            }
+
+            // Database
+            let db = '';
+            if (d.sqlite) {
+                db += row('Inventories', d.sqlite.total_inventories?.toLocaleString() ?? 0);
+                if (d.sqlite.db_size_bytes)
+                    db += row('DB Size', `${(d.sqlite.db_size_bytes / 1024 / 1024).toFixed(2)} MB`);
+                if (d.sqlite.last_sync)
+                    db += row('Last Sync', new Date(d.sqlite.last_sync).toLocaleString());
+            }
+            if (d.redis_buffer?.pending_items !== undefined) {
+                db += row('Buffer Pending', d.redis_buffer.pending_items);
+            }
+            document.getElementById('db').innerHTML = db || row('No data', '--');
+
+            // Time
+            document.getElementById('time').textContent = new Date().toLocaleTimeString();
+        }
+
+        function row(k, v, color = '') {
+            return `<div class="row">
+                <span class="row-key">${k}</span>
+                <span class="row-val ${color}">${v}</span>
+            </div>`;
+        }
+
+        function status(type, msg) {
+            const el = document.getElementById('status');
+            el.className = `status ${type}`;
+            el.innerHTML = `<div class="dot"></div><span>${msg}</span>`;
+        }
+
+        load();
+        setInterval(load, 5000);
+    </script>
+</body>
+
+</html>

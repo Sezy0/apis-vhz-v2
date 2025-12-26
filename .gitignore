@@ -1,0 +1,25 @@
+# Dependencies
+/vendor/
+
+# Windows binaries only (keep Linux binary for deployment)
+*.exe
+
+# Environment
+.env
+.env.local
+
+# Data
+/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+__debug_bin*
