@@ -430,8 +430,6 @@ local function LoadGameScript(useLite, key)
                         
                         -- Store globally for access from main script
                         _G.VinzHub_InventorySync = InventorySync
-                        
-                        print("[VinzHub] InventorySync loaded for Fish It (60s interval)")
                     end
                 end
             end)

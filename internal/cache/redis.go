@@ -14,8 +14,8 @@ import (
 
 // Buffer configuration
 const (
-	MaxBatchSize       = 500
-	FlushTimeout       = 60 * time.Second
+	MaxBatchSize       = 20  // Reduced for slow cloud DB (Aiven)
+	FlushTimeout       = 120 * time.Second  // 2 minutes for slow connections
 	StaleDataThreshold = 1 * time.Hour
 	CleanupInterval    = 5 * time.Minute
 )

@@ -732,9 +732,6 @@ function InventorySync.Login(licenseKey, manualHwid)
         local tokenData = data.data or data  -- Support both wrapped and unwrapped
         if tokenData and tokenData.token then
             Config.Token = tokenData.token
-            if Config.Debug then
-                print("[InventorySync] Login Successful! Token expires in:", tokenData.expires_in)
-            end
             return true
         else
             warn("[InventorySync] Login Failed: Invalid response format")
