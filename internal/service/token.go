@@ -18,8 +18,8 @@ const (
 	// TokenPrefix is the prefix for all session tokens
 	TokenPrefix = "vht_"
 
-	// TokenTTL is the default token lifetime (1 hour)
-	TokenTTL = 1 * time.Hour
+	// TokenTTL is the default token lifetime (7 days for long AFK sessions)
+	TokenTTL = 7 * 24 * time.Hour
 
 	// TokenRedisKeyPrefix is the Redis key prefix for tokens
 	TokenRedisKeyPrefix = "vinzhub:token:"

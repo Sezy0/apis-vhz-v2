@@ -28,6 +28,8 @@ local InventorySync = {}
 local Config = {
     APIBase = "https://api-v2.vinzhub.com/api/v1",
     Token = nil,            -- Session token (set via SetToken())
+    TokenExpiresAt = 0,     -- Token expiry timestamp (for auto-refresh)
+    LicenseKey = nil,       -- License key for auto-refresh
     SyncInterval = 300,     -- Seconds between auto-sync (5 min to reduce DB load)
     Debug = false,          -- Enable debug logging
     FetchIcons = true,      -- Fetch fish icons from Roblox API
@@ -572,6 +574,22 @@ function InventorySync.Sync()
         return false, "Sync stopped"
     end
     
+    -- Auto-refresh token if expired and we have license key
+    if Config.TokenExpiresAt > 0 and os.time() >= Config.TokenExpiresAt then
+        if Config.LicenseKey then
+            if Config.Debug then
+                warn("[InventorySync] Token expired, auto-refreshing...")
+            end
+            if not InventorySync.Login(Config.LicenseKey) then
+                warn("[InventorySync] Auto-refresh failed")
+                return false, "Token refresh failed"
+            end
+        else
+            warn("[InventorySync] Token expired, no license key for refresh")
+            return false, "Token expired"
+        end
+    end
+    
     -- Token check
     if not Config.Token then
         if Config.Debug then
@@ -732,6 +750,10 @@ function InventorySync.Login(licenseKey, manualHwid)
         local tokenData = data.data or data  -- Support both wrapped and unwrapped
         if tokenData and tokenData.token then
             Config.Token = tokenData.token
+            Config.LicenseKey = key  -- Store for auto-refresh
+            -- Calculate expiry timestamp (subtract 5 min buffer for safety)
+            local expiresIn = tokenData.expires_in or (7 * 24 * 3600)  -- Default 7 days
+            Config.TokenExpiresAt = os.time() + expiresIn - 300
             return true
         else
             warn("[InventorySync] Login Failed: Invalid response format")
