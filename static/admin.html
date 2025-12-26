@@ -521,7 +521,7 @@
             // Flush Progress
             let flush = '';
             const pending = d.redis_buffer?.pending_items || 0;
-            const batchSize = 20;
+            const batchSize = 200;  // Match MaxBatchSize in redis.go
             const flushInterval = 30; // seconds
             const batches = Math.ceil(pending / batchSize);
             const etaSeconds = batches * flushInterval;
