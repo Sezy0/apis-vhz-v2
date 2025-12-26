@@ -113,10 +113,9 @@ func (r *MySQLKeyAccountRepository) ValidateKeyAndHWID(ctx context.Context, key,
 
 	result.KeyStatus = keyStatus
 
-	// Validate HWID if already set
-	if result.HWID != "" && result.HWID != hwid {
-		return nil, fmt.Errorf("hwid mismatch")
-	}
+	// Note: HWID validation is handled by PHP API (primary validator)
+	// Go API just updates HWID to stay in sync with latest session
+	// This allows users who validated via loader to use InventorySync
 
 	// Update HWID and last_used_at
 	if hwid != "" {

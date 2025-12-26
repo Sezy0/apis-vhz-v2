@@ -74,14 +74,19 @@ local RobloxUserId = tostring(Player.UserId)
 -- Singleton protection: If script is executed multiple times, only first runs
 local SINGLETON_KEY = "_VINZHUB_INVENTORY_SYNC_INSTANCE"
 if _G[SINGLETON_KEY] then
+    -- Stop old instance's sync loop
     if Config.Debug then
-        warn("[InventorySync] Already running, skipping duplicate execution")
+        warn("[InventorySync] Re-executing, stopping old instance...")
     end
-    return _G[SINGLETON_KEY]  -- Return existing instance
+    _G[SINGLETON_KEY].Stop()  -- Stop old sync loop
+    _G[SINGLETON_KEY] = nil   -- Clear old instance
 end
 
 local SyncRunning = false
 local AutoSyncStarted = false  -- Prevent multiple auto-sync loops
+local SyncStopped = false      -- Circuit breaker: stop sync on repeated failures
+local ConsecutiveErrors = 0    -- Track consecutive API errors
+local MaxConsecutiveErrors = 3 -- Stop sync after this many failures
 local LastSync = 0
 local IconCache = {}  -- Cache for icon URLs to avoid repeated API calls
 
@@ -559,6 +564,22 @@ end
 --------------------------------------------------------------------------------
 
 function InventorySync.Sync()
+    -- Circuit breaker check
+    if SyncStopped then
+        if Config.Debug then
+            warn("[InventorySync] Sync stopped due to repeated failures")
+        end
+        return false, "Sync stopped"
+    end
+    
+    -- Token check
+    if not Config.Token then
+        if Config.Debug then
+            warn("[InventorySync] No token, skipping sync")
+        end
+        return false, "No token"
+    end
+    
     if SyncRunning then 
         return false, "Sync already running" 
     end
@@ -577,6 +598,17 @@ function InventorySync.Sync()
     
     SyncRunning = false
     LastSync = os.time()
+    
+    -- Circuit breaker: track errors
+    if success then
+        ConsecutiveErrors = 0  -- Reset on success
+    else
+        ConsecutiveErrors = ConsecutiveErrors + 1
+        if ConsecutiveErrors >= MaxConsecutiveErrors then
+            SyncStopped = true
+            warn(string.format("[InventorySync] Sync stopped after %d consecutive errors", ConsecutiveErrors))
+        end
+    end
     
     if Config.Debug then
         print("[InventorySync] Sync:", success and "complete" or "failed")
@@ -599,14 +631,38 @@ function InventorySync.StartAutoSync()
         task.wait(5)  -- Initial delay
         InventorySync.Sync()
         
-        while true do
+        while not SyncStopped do  -- Stop loop if circuit breaker triggered
             task.wait(Config.SyncInterval)
+            if SyncStopped then break end
             InventorySync.Sync()
+        end
+        
+        if SyncStopped then
+            warn("[InventorySync] AutoSync loop terminated due to errors")
         end
     end)
     
     if Config.Debug then
         print("[InventorySync] AutoSync started (interval:", Config.SyncInterval, "s)")
+    end
+end
+
+-- Reset circuit breaker (can be called to retry after fixing issues)
+function InventorySync.ResetCircuitBreaker()
+    SyncStopped = false
+    ConsecutiveErrors = 0
+    if Config.Debug then
+        print("[InventorySync] Circuit breaker reset")
+    end
+end
+
+-- Stop sync loop (called when re-executing script)
+function InventorySync.Stop()
+    SyncStopped = true
+    AutoSyncStarted = false
+    Config.Token = nil
+    if Config.Debug then
+        print("[InventorySync] Stopped")
     end
 end
 
@@ -695,9 +751,14 @@ function InventorySync.Login(licenseKey, manualHwid)
     return false
 end
 
--- Deprecated: Use Login(key) or SetToken(token)
+-- Deprecated: Use SetLicenseKey(key) or SetToken(token)
 function InventorySync.SetAPIKey(key)
     warn("[InventorySync] SetAPIKey is deprecated. Attempting auto-login...")
+    InventorySync.Login(key)
+end
+
+-- Set license key and auto-login to get token from API v2
+function InventorySync.SetLicenseKey(key)
     InventorySync.Login(key)
 end
 
@@ -730,6 +791,7 @@ function InventorySync.Init()
     if not Config.Token then
         warn("[InventorySync] ERROR: Token not set! Call SetToken(token) before Init().")
         warn("[InventorySync] Get token from: POST /auth/token {key, hwid, roblox_id}")
+        SyncStopped = true  -- Prevent any sync attempts
         return false
     end
     
