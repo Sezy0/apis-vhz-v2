@@ -31,8 +31,9 @@ func NewObfuscationHandler(foxzyPath, fileUploaderURL string) *ObfuscationHandle
 
 // ObfuscateRequest is the request body for obfuscation
 type ObfuscateRequest struct {
-	Content string `json:"content"`
-	Preset  string `json:"preset"` // FoxzyLight, FoxzyBalanced, FoxzyMax
+	Content  string `json:"content"`
+	Preset   string `json:"preset"`   // FoxzyLight, FoxzyBalanced, FoxzyMax
+	Filename string `json:"filename"` // Original filename
 }
 
 // ObfuscateResponse is the response for obfuscation
@@ -117,7 +118,7 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 	var slug string
 	var resultURL string
 	if h.FileUploaderURL != "" {
-		slug, resultURL, err = h.uploadToFileUploader(string(obfuscated))
+		slug, resultURL, err = h.uploadToFileUploader(string(obfuscated), req.Filename)
 		if err != nil {
 			// Log error but don't fail - return content directly
 			fmt.Printf("Failed to upload to file-uploader: %v\n", err)
@@ -136,10 +137,11 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 }
 
 // uploadToFileUploader uploads obfuscated content to file-uploader service
-func (h *ObfuscationHandler) uploadToFileUploader(content string) (string, string, error) {
+func (h *ObfuscationHandler) uploadToFileUploader(content string, filename string) (string, string, error) {
 	payload := map[string]string{
-		"content": content,
-		"type":    "obfuscated",
+		"content":  content,
+		"type":     "obfuscated",
+		"filename": filename,
 	}
 	
 	jsonData, err := json.Marshal(payload)
