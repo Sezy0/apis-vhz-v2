@@ -42,6 +42,13 @@ func New(cfg Config) *chi.Mux {
 		r.Get("/api/status", cfg.Handler.Status)
 	}
 
+	// Public API v1 routes
+	r.Route("/api/v1", func(r chi.Router) {
+		if cfg.ObfuscationHandler != nil {
+			r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
+		}
+	})
+
 	// Static files (admin dashboard) - public
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
@@ -90,11 +97,6 @@ func New(cfg Config) *chi.Mux {
 					r.Get("/health", cfg.AdminHandler.GetHealth)
 					r.Post("/login", cfg.AdminHandler.VerifyLogin)
 				})
-			}
-
-			// Obfuscation endpoint
-			if cfg.ObfuscationHandler != nil {
-				r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
 			}
 		})
 	})
