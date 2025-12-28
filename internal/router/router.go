@@ -36,7 +36,12 @@ func New(cfg Config) *chi.Mux {
 		MaxAge:           300,
 	}))
 
-	// API Key/Token authentication
+	// Public status endpoint for bot monitoring (BEFORE auth middleware)
+	if cfg.Handler != nil {
+		r.Get("/api/status", cfg.Handler.Status)
+	}
+
+	// API Key/Token authentication (applies to routes registered AFTER this)
 	if cfg.AuthMiddleware != nil {
 		r.Use(cfg.AuthMiddleware)
 	}
@@ -75,11 +80,6 @@ func New(cfg Config) *chi.Mux {
 			})
 		}
 	})
-
-	// Status endpoint at /api/status for bot monitoring (outside /api/v1)
-	if cfg.Handler != nil {
-		r.Get("/api/status", cfg.Handler.Status)
-	}
 
 	// Static files (admin dashboard)
 	fileServer := http.FileServer(http.Dir("./static"))
