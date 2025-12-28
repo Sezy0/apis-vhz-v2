@@ -23,7 +23,7 @@ type Config struct {
 func New(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Global middleware stack
+	// Global middleware stack (applies to ALL routes)
 	r.Use(middleware.Recovery)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logging)
@@ -36,58 +36,61 @@ func New(cfg Config) *chi.Mux {
 		MaxAge:           300,
 	}))
 
-	// Public status endpoint for bot monitoring (BEFORE auth middleware)
+	// PUBLIC routes (no auth required)
 	if cfg.Handler != nil {
 		r.Get("/api/status", cfg.Handler.Status)
 	}
 
-	// API Key/Token authentication (applies to routes registered AFTER this)
-	if cfg.AuthMiddleware != nil {
-		r.Use(cfg.AuthMiddleware)
-	}
-
-	// API v1 routes
-	r.Route("/api/v1", func(r chi.Router) {
-		// Health check endpoints
-		if cfg.Handler != nil {
-			r.Get("/health", cfg.Handler.Health)
-			r.Get("/ready", cfg.Handler.Ready)
-		}
-
-		// Auth endpoints
-		if cfg.AuthHandler != nil {
-			r.Route("/auth", func(r chi.Router) {
-				r.Post("/token", cfg.AuthHandler.GenerateToken)
-				r.Post("/revoke", cfg.AuthHandler.RevokeToken)
-				r.Post("/refresh", cfg.AuthHandler.RefreshToken)
-			})
-		}
-
-		// Inventory endpoints
-		if cfg.InventoryHandler != nil {
-			r.Route("/inventory/{roblox_user_id}", func(r chi.Router) {
-				r.Post("/sync", cfg.InventoryHandler.SyncRawInventory)
-				r.Get("/", cfg.InventoryHandler.GetRawInventory)
-			})
-		}
-
-		// Admin endpoints
-		if cfg.AdminHandler != nil {
-			r.Route("/admin", func(r chi.Router) {
-				r.Get("/stats", cfg.AdminHandler.GetStats)
-				r.Get("/health", cfg.AdminHandler.GetHealth)
-				r.Post("/login", cfg.AdminHandler.VerifyLogin)
-			})
-		}
-	})
-
-	// Static files (admin dashboard)
+	// Static files (admin dashboard) - public
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
 
-	// Admin dashboard redirect
+	// Admin dashboard redirect - public
 	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/static/admin.html", http.StatusMovedPermanently)
+	})
+
+	// AUTHENTICATED routes (use Group to apply auth middleware only to these)
+	r.Group(func(r chi.Router) {
+		// Apply auth middleware only to this group
+		if cfg.AuthMiddleware != nil {
+			r.Use(cfg.AuthMiddleware)
+		}
+
+		// API v1 routes
+		r.Route("/api/v1", func(r chi.Router) {
+			// Health check endpoints
+			if cfg.Handler != nil {
+				r.Get("/health", cfg.Handler.Health)
+				r.Get("/ready", cfg.Handler.Ready)
+			}
+
+			// Auth endpoints
+			if cfg.AuthHandler != nil {
+				r.Route("/auth", func(r chi.Router) {
+					r.Post("/token", cfg.AuthHandler.GenerateToken)
+					r.Post("/revoke", cfg.AuthHandler.RevokeToken)
+					r.Post("/refresh", cfg.AuthHandler.RefreshToken)
+				})
+			}
+
+			// Inventory endpoints
+			if cfg.InventoryHandler != nil {
+				r.Route("/inventory/{roblox_user_id}", func(r chi.Router) {
+					r.Post("/sync", cfg.InventoryHandler.SyncRawInventory)
+					r.Get("/", cfg.InventoryHandler.GetRawInventory)
+				})
+			}
+
+			// Admin endpoints
+			if cfg.AdminHandler != nil {
+				r.Route("/admin", func(r chi.Router) {
+					r.Get("/stats", cfg.AdminHandler.GetStats)
+					r.Get("/health", cfg.AdminHandler.GetHealth)
+					r.Post("/login", cfg.AdminHandler.VerifyLogin)
+				})
+			}
+		})
 	})
 
 	return r
