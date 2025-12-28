@@ -154,13 +154,22 @@ func main() {
 		TokenService: tokenService,
 	})
 
+	// Initialize obfuscation handler
+	foxzyPath := os.Getenv("FOXZY_PATH")
+	if foxzyPath == "" {
+		foxzyPath = "/opt/foxzy"
+	}
+	fileUploaderURL := os.Getenv("FILE_UPLOADER_URL")
+	obfuscationHandler := handler.NewObfuscationHandler(foxzyPath, fileUploaderURL)
+
 	// Create router
 	r := router.New(router.Config{
-		Handler:          healthHandler,
-		InventoryHandler: inventoryHandler,
-		AdminHandler:     adminHandler,
-		AuthHandler:      authHandler,
-		AuthMiddleware:   authMiddleware,
+		Handler:            healthHandler,
+		InventoryHandler:   inventoryHandler,
+		AdminHandler:       adminHandler,
+		AuthHandler:        authHandler,
+		ObfuscationHandler: obfuscationHandler,
+		AuthMiddleware:     authMiddleware,
 	})
 
 	// Create HTTP server

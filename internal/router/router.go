@@ -12,11 +12,12 @@ import (
 
 // Config holds the configuration for creating a router.
 type Config struct {
-	Handler          *handler.Handler
-	InventoryHandler *handler.InventoryHandler
-	AdminHandler     *handler.AdminHandler
-	AuthHandler      *handler.AuthHandler
-	AuthMiddleware   func(http.Handler) http.Handler
+	Handler             *handler.Handler
+	InventoryHandler    *handler.InventoryHandler
+	AdminHandler        *handler.AdminHandler
+	AuthHandler         *handler.AuthHandler
+	ObfuscationHandler  *handler.ObfuscationHandler
+	AuthMiddleware      func(http.Handler) http.Handler
 }
 
 // New creates and configures the HTTP router.
@@ -89,6 +90,11 @@ func New(cfg Config) *chi.Mux {
 					r.Get("/health", cfg.AdminHandler.GetHealth)
 					r.Post("/login", cfg.AdminHandler.VerifyLogin)
 				})
+			}
+
+			// Obfuscation endpoint
+			if cfg.ObfuscationHandler != nil {
+				r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
 			}
 		})
 	})
