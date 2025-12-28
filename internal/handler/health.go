@@ -2,10 +2,14 @@ package handler
 
 import (
 	"net/http"
+	"runtime"
 	"time"
 
 	"vinzhub-rest-api-v2/pkg/response"
 )
+
+// StartTime tracks when the server started for uptime calculation
+var StartTime = time.Now()
 
 // Handler contains shared HTTP handlers and their dependencies.
 type Handler struct{}
@@ -69,5 +73,50 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
+	response.OK(w, resp)
+}
+
+// StatusChecks represents the checks in status response
+type StatusChecks struct {
+	Database string  `json:"database"`
+	MemoryMB float64 `json:"memory_mb"`
+}
+
+// StatusResponse represents the unified status response for bot monitoring
+type StatusResponse struct {
+	Service       string       `json:"service"`
+	Status        string       `json:"status"`
+	Timestamp     string       `json:"timestamp"`
+	UptimeSeconds int64        `json:"uptime_seconds"`
+	PingMS        int64        `json:"ping_ms"`
+	Checks        StatusChecks `json:"checks"`
+}
+
+// Status handles GET /api/status - unified health check for bot monitoring
+func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
+	requestStart := time.Now()
+
+	// Get memory stats
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	memoryMB := float64(memStats.Alloc) / 1024 / 1024
+
+	// Calculate metrics
+	pingMS := time.Since(requestStart).Milliseconds()
+	uptimeSeconds := int64(time.Since(StartTime).Seconds())
+
+	resp := StatusResponse{
+		Service:       "vinzhub-rest-api",
+		Status:        "ok",
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		UptimeSeconds: uptimeSeconds,
+		PingMS:        pingMS,
+		Checks: StatusChecks{
+			Database: "ok", // API doesn't have direct DB - always ok
+			MemoryMB: float64(int(memoryMB*100)) / 100,
+		},
+	}
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	response.OK(w, resp)
 }

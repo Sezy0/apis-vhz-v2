@@ -76,6 +76,11 @@ func New(cfg Config) *chi.Mux {
 		}
 	})
 
+	// Status endpoint at /api/status for bot monitoring (outside /api/v1)
+	if cfg.Handler != nil {
+		r.Get("/api/status", cfg.Handler.Status)
+	}
+
 	// Static files (admin dashboard)
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
