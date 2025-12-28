@@ -419,7 +419,7 @@
         let LOGIN_KEY = sessionStorage.getItem('admin_key') || '';
 
         // Chart configuration
-        const MAX_DATA_POINTS = 20;
+        const MAX_DATA_POINTS = 60; // Keep 5 minutes of data at 5s intervals
         const memoryHistory = [];
         const pendingHistory = [];
         const timeLabels = [];
@@ -533,6 +533,23 @@
             setInterval(load, 5000);
         }
 
+        // Format bytes to human readable (KB, MB, GB, TB)
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+        }
+
+        // Format MB to human readable
+        function formatMB(mb, decimals = 2) {
+            if (mb < 1) return (mb * 1024).toFixed(decimals) + ' KB';
+            if (mb >= 1024) return (mb / 1024).toFixed(decimals) + ' GB';
+            if (mb >= 1024 * 1024) return (mb / 1024 / 1024).toFixed(decimals) + ' TB';
+            return mb.toFixed(decimals) + ' MB';
+        }
+
         async function load() {
             try {
                 const res = await fetch('/api/v1/admin/stats', {
@@ -596,13 +613,13 @@
                     row('Goroutines', d.memory?.goroutines || '--');
             }
 
-            // Memory Detail
+            // Memory Detail with auto-formatted sizes
             if (d.memory) {
                 document.getElementById('mem-detail').innerHTML =
-                    row('Heap Alloc', `${d.memory.heap_alloc_mb.toFixed(2)} MB`) +
-                    row('Heap InUse', `${d.memory.heap_inuse_mb.toFixed(2)} MB`) +
-                    row('Sys Memory', `${d.memory.sys_mb.toFixed(2)} MB`) +
-                    row('Total Alloc', `${d.memory.total_alloc_mb.toFixed(2)} MB`) +
+                    row('Heap Alloc', formatMB(d.memory.heap_alloc_mb)) +
+                    row('Heap InUse', formatMB(d.memory.heap_inuse_mb)) +
+                    row('Sys Memory', formatMB(d.memory.sys_mb)) +
+                    row('Total Alloc', formatMB(d.memory.total_alloc_mb)) +
                     row('GC Runs', d.memory.num_gc);
             }
 
@@ -611,7 +628,7 @@
             if (d.sqlite) {
                 db += row('Inventories', d.sqlite.total_inventories?.toLocaleString() ?? 0);
                 if (d.sqlite.db_size_bytes)
-                    db += row('DB Size', `${(d.sqlite.db_size_bytes / 1024 / 1024).toFixed(2)} MB`);
+                    db += row('DB Size', formatBytes(d.sqlite.db_size_bytes));
                 if (d.sqlite.last_sync)
                     db += row('Last Sync', new Date(d.sqlite.last_sync).toLocaleString());
             }
