@@ -42,13 +42,6 @@ func New(cfg Config) *chi.Mux {
 		r.Get("/api/status", cfg.Handler.Status)
 	}
 
-	// Public API v1 routes
-	r.Route("/api/v1", func(r chi.Router) {
-		if cfg.ObfuscationHandler != nil {
-			r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
-		}
-	})
-
 	// Static files (admin dashboard) - public
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
@@ -58,16 +51,20 @@ func New(cfg Config) *chi.Mux {
 		http.Redirect(w, r, "/static/admin.html", http.StatusMovedPermanently)
 	})
 
-	// AUTHENTICATED routes (use Group to apply auth middleware only to these)
-	r.Group(func(r chi.Router) {
-		// Apply auth middleware only to this group
-		if cfg.AuthMiddleware != nil {
-			r.Use(cfg.AuthMiddleware)
+	// API v1 routes
+	r.Route("/api/v1", func(r chi.Router) {
+		// PUBLIC ROUTES
+		if cfg.ObfuscationHandler != nil {
+			r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
 		}
 
-		// API v1 routes
-		r.Route("/api/v1", func(r chi.Router) {
-			// Health check endpoints
+		// AUTHENTICATED ROUTES
+		r.Group(func(r chi.Router) {
+			if cfg.AuthMiddleware != nil {
+				r.Use(cfg.AuthMiddleware)
+			}
+
+			// Health check endpoints (protected)
 			if cfg.Handler != nil {
 				r.Get("/health", cfg.Handler.Health)
 				r.Get("/ready", cfg.Handler.Ready)
