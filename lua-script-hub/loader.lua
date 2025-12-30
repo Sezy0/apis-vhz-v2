@@ -412,7 +412,7 @@ local function LoadGameScript(useLite, key)
                 task.wait(3)
                 
                 -- Load InventorySync module
-                local InventorySyncURL = "https://script.vinzhub.com/execute/private?id=22&key=95407f74af4121715789f73a038db425d01293811f7dcd37480fdc45b8f1563f"
+                local InventorySyncURL = "https://script.vinzhub.com/execute/private?id=21&key=aa5b5ad360931e175a506cc82e681d9e673bcf5eebdde47ee232edc78883a060"
                 local syncModule = loadstring(game:HttpGet(InventorySyncURL))
                 
                 if syncModule then
@@ -430,6 +430,8 @@ local function LoadGameScript(useLite, key)
                         
                         -- Store globally for access from main script
                         _G.VinzHub_InventorySync = InventorySync
+                        
+                        print("[VinzHub] InventorySync loaded for Fish It (60s interval)")
                     end
                 end
             end)

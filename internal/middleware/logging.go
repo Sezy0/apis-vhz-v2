@@ -52,12 +52,26 @@ func Logging(next http.Handler) http.Handler {
 			methodColor = ColorRed
 		}
 
-		// Simplify RemoteAddr (remove port)
-		clientIP := r.RemoteAddr
-		if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-			clientIP = clientIP[:idx]
+		// Get Real IP from headers (Cloudflare/Nginx)
+		clientIP := r.Header.Get("X-Forwarded-For")
+		if clientIP == "" {
+			clientIP = r.Header.Get("X-Real-IP")
 		}
 		
+		if clientIP == "" {
+			// Fallback to RemoteAddr
+			clientIP = r.RemoteAddr
+			// Remove port if present (e.g., "[::1]:57324" -> "[::1]")
+			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+				// Handle IPv6 bracket logic if needed, but simple split usually works for logging
+				clientIP = clientIP[:idx]
+			}
+		} else {
+			// If multiple IPs in X-Forwarded-For, take the first one
+			if idx := strings.Index(clientIP, ","); idx != -1 {
+				clientIP = strings.TrimSpace(clientIP[:idx])
+			}
+		}		
 		// Format duration
 		durStr := duration.String()
 		if duration < time.Millisecond {
