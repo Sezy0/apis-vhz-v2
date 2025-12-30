@@ -29,11 +29,18 @@ func NewObfuscationHandler(foxzyPath, fileUploaderURL string) *ObfuscationHandle
 	}
 }
 
+// CustomConfig defines custom obfuscation settings
+type CustomConfig struct {
+	NameGenerator string   `json:"NameGenerator"`
+	Steps         []string `json:"Steps"`
+}
+
 // ObfuscateRequest is the request body for obfuscation
 type ObfuscateRequest struct {
-	Content  string `json:"content"`
-	Preset   string `json:"preset"`   // FoxzyLight, FoxzyBalanced, FoxzyMax
-	Filename string `json:"filename"` // Original filename
+	Content      string        `json:"content"`
+	Preset       string        `json:"preset"` // FoxzyLight, FoxzyBalanced, FoxzyMax
+	Filename     string        `json:"filename"` // Original filename
+	CustomConfig *CustomConfig `json:"customConfig,omitempty"`
 }
 
 // ObfuscateResponse is the response for obfuscation
@@ -44,6 +51,36 @@ type ObfuscateResponse struct {
 	Content     string `json:"content,omitempty"`
 	Error       string `json:"error,omitempty"`
 	ProcessTime int64  `json:"process_time_ms,omitempty"`
+}
+
+// generateCustomConfig creates a temporary Lua config file
+func (h *ObfuscationHandler) generateCustomConfig(config *CustomConfig) (string, error) {
+	tmpDir := os.TempDir()
+	configFile := filepath.Join(tmpDir, fmt.Sprintf("foxzy_config_%d.lua", time.Now().UnixNano()))
+
+	var stepsLua string
+	for _, step := range config.Steps {
+		stepsLua += fmt.Sprintf(`{ Name = "%s", Settings = {} },`, step)
+	}
+
+	luaConfig := fmt.Sprintf(`
+return {
+    LuaVersion = "Lua51",
+    VarNamePrefix = "",
+    NameGenerator = "%s",
+    PrettyPrint = false,
+    Seed = 0,
+    Steps = {
+        %s
+    }
+}
+`, config.NameGenerator, stepsLua)
+
+	if err := os.WriteFile(configFile, []byte(luaConfig), 0644); err != nil {
+		return "", err
+	}
+
+	return configFile, nil
 }
 
 // Obfuscate handles POST /api/v1/obfuscate
@@ -62,38 +99,6 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Validate preset - all available Foxzy presets
-	validPresets := map[string]bool{
-		"Minify":            true,
-		"FoxzyLight":        true,
-		"FoxzyBalanced":     true,
-		"FoxzyMax":          true,
-		"FoxzyMaxCF":        true,
-		"FoxzyUltimate":     true,
-		"FoxzyInsane":       true,
-		"FoxzyLuraph":       true,
-		"FoxzyApocalypse":   true,
-		"FoxzyHardcore":     true,
-		"FoxzyPerformance":  true,
-		"FoxzyCompact":      true,
-		"FoxzyMini":         true,
-		"FoxzySafe":         true,
-		"FoxzyConfusion":    true,
-		"FoxzyStringMax":    true,
-		"FoxzyAntiAnalysis": true,
-		"FoxzyPacked":       true,
-		"FoxzyRoblox":       true,
-	}
-	
-	if req.Preset == "" {
-		req.Preset = "FoxzyBalanced"
-	}
-	
-	if !validPresets[req.Preset] {
-		response.Error(w, apierror.BadRequest("Invalid preset"))
-		return
-	}
-	
 	// Create temp files
 	tmpDir := os.TempDir()
 	inputFile := filepath.Join(tmpDir, fmt.Sprintf("foxzy_input_%d.lua", time.Now().UnixNano()))
@@ -106,9 +111,59 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(inputFile)
 	defer os.Remove(outputFile)
+
+	var cmd *exec.Cmd
+	var configFile string
+
+	if req.CustomConfig != nil {
+		// Custom Configuration Mode
+		var err error
+		configFile, err = h.generateCustomConfig(req.CustomConfig)
+		if err != nil {
+			response.Error(w, apierror.InternalError("Failed to generate custom config"))
+			return
+		}
+		defer os.Remove(configFile)
+
+		cmd = exec.Command("lua", "cli.lua", "--config", configFile, "--Lua51", "--out", outputFile, inputFile)
+	} else {
+		// Preset Mode
+		// Validate preset - all available Foxzy presets
+		validPresets := map[string]bool{
+			"Minify":            true,
+			"FoxzyLight":        true,
+			"FoxzyBalanced":     true,
+			"FoxzyMax":          true,
+			"FoxzyMaxCF":        true,
+			"FoxzyUltimate":     true,
+			"FoxzyInsane":       true,
+			"FoxzyLuraph":       true,
+			"FoxzyApocalypse":   true,
+			"FoxzyHardcore":     true,
+			"FoxzyPerformance":  true,
+			"FoxzyCompact":      true,
+			"FoxzyMini":         true,
+			"FoxzySafe":         true,
+			"FoxzyConfusion":    true,
+			"FoxzyStringMax":    true,
+			"FoxzyAntiAnalysis": true,
+			"FoxzyPacked":       true,
+			"FoxzyRoblox":       true,
+		}
+		
+		if req.Preset == "" {
+			req.Preset = "FoxzyBalanced"
+		}
+		
+		if !validPresets[req.Preset] {
+			response.Error(w, apierror.BadRequest("Invalid preset"))
+			return
+		}
+
+		cmd = exec.Command("lua", "cli.lua", "--preset", req.Preset, "--Lua51", "--out", outputFile, inputFile)
+	}
 	
 	// Run Foxzy
-	cmd := exec.Command("lua", "cli.lua", "--preset", req.Preset, "--Lua51", "--out", outputFile, inputFile)
 	cmd.Dir = h.FoxzyPath
 	
 	var stderr bytes.Buffer
