@@ -176,6 +176,28 @@ func (r *PostgresInventoryRepository) GetStats(ctx context.Context) (map[string]
 	return stats, nil
 }
 
+// DeleteInactiveUsers deletes inventory records that haven't been synced within the threshold.
+func (r *PostgresInventoryRepository) DeleteInactiveUsers(ctx context.Context, threshold time.Duration) (int64, error) {
+	cutoffTime := time.Now().Add(-threshold)
+	
+	query := `DELETE FROM fishit_inventory_raw WHERE synced_at < $1`
+	result, err := r.db.ExecContext(ctx, query, cutoffTime)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete inactive users: %w", err)
+	}
+	
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	
+	if deleted > 0 {
+		log.Printf("[Postgres] Cleaned up %d inactive inventory records (threshold: %v)", deleted, threshold)
+	}
+	
+	return deleted, nil
+}
+
 // Close closes the database connection pool.
 func (r *PostgresInventoryRepository) Close() error {
 	return r.db.Close()

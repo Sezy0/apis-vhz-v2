@@ -21,6 +21,9 @@ type InventoryRepository interface {
 	// GetStats returns statistics about the inventory database.
 	GetStats(ctx context.Context) (map[string]interface{}, error)
 
+	// DeleteInactiveUsers deletes inventory records that haven't been synced within threshold.
+	DeleteInactiveUsers(ctx context.Context, threshold time.Duration) (int64, error)
+
 	// Close closes the repository connection.
 	Close() error
 }

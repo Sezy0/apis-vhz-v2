@@ -172,6 +172,31 @@ func (r *SQLiteInventoryRepository) GetStats(ctx context.Context) (map[string]in
 	return stats, nil
 }
 
+// DeleteInactiveUsers deletes inventory records that haven't been synced within the threshold.
+func (r *SQLiteInventoryRepository) DeleteInactiveUsers(ctx context.Context, threshold time.Duration) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cutoffTime := time.Now().Add(-threshold)
+	
+	query := `DELETE FROM fishit_inventory_raw WHERE synced_at < ?`
+	result, err := r.db.ExecContext(ctx, query, cutoffTime)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete inactive users: %w", err)
+	}
+	
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	
+	if deleted > 0 {
+		log.Printf("[SQLite] Cleaned up %d inactive inventory records (threshold: %v)", deleted, threshold)
+	}
+	
+	return deleted, nil
+}
+
 // Close closes the database connection.
 func (r *SQLiteInventoryRepository) Close() error {
 	return r.db.Close()

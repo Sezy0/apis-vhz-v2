@@ -190,6 +190,29 @@ func (r *MongoDBInventoryRepository) GetStats(ctx context.Context) (map[string]i
 	return stats, nil
 }
 
+// DeleteInactiveUsers deletes inventory records that haven't been synced within the threshold.
+// For example, threshold of 30*24*time.Hour deletes users inactive for 30 days.
+func (r *MongoDBInventoryRepository) DeleteInactiveUsers(ctx context.Context, threshold time.Duration) (int64, error) {
+	cutoffTime := time.Now().Add(-threshold)
+	
+	filter := bson.M{
+		"synced_at": bson.M{
+			"$lt": cutoffTime,
+		},
+	}
+	
+	result, err := r.collection.DeleteMany(ctx, filter)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete inactive users: %w", err)
+	}
+	
+	if result.DeletedCount > 0 {
+		log.Printf("[MongoDB] Cleaned up %d inactive inventory records (threshold: %v)", result.DeletedCount, threshold)
+	}
+	
+	return result.DeletedCount, nil
+}
+
 // Close closes the MongoDB connection.
 func (r *MongoDBInventoryRepository) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -139,6 +139,11 @@ func main() {
 		tokenService = service.NewTokenService(redisClient)
 	}
 
+	// Initialize cleanup scheduler for inactive inventory data
+	cleanupScheduler := service.NewCleanupScheduler(inventoryRepo, service.DefaultCleanupConfig())
+	cleanupScheduler.Start()
+	defer cleanupScheduler.Stop()
+
 	// Initialize handlers
 	healthHandler := handler.New()
 	inventoryHandler := handler.NewInventoryHandler(inventoryService)
