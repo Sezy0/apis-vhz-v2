@@ -85,6 +85,31 @@ func main() {
 		} else {
 			keyAccountRepo = repository.NewMySQLKeyAccountRepository(mysqlDB)
 			log.Println("MySQL repository initialized")
+
+			// Auto-migration for logs table
+			_, err := mysqlDB.Exec(`
+				CREATE TABLE IF NOT EXISTS obfuscation_logs (
+				  id int(11) NOT NULL AUTO_INCREMENT,
+				  user_id int(11) DEFAULT NULL,
+				  ip_address varchar(45) NOT NULL,
+				  file_name varchar(255) NOT NULL,
+				  file_size_in bigint(20) NOT NULL,
+				  file_size_out bigint(20) NOT NULL,
+				  preset_used varchar(50) NOT NULL,
+				  status enum('success','failed') NOT NULL DEFAULT 'success',
+				  error_message text DEFAULT NULL,
+				  execution_time_ms int(11) NOT NULL,
+				  created_at timestamp NOT NULL DEFAULT current_timestamp(),
+				  PRIMARY KEY (id),
+				  KEY idx_user_id (user_id),
+				  KEY idx_created_at (created_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+			`)
+			if err != nil {
+				log.Printf("Warning: Failed to auto-migrate obfuscation_logs table: %v", err)
+			} else {
+				log.Println("Auto-migration: obfuscation_logs table ensured")
+			}
 		}
 	}
 	if mysqlDB != nil {
