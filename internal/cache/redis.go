@@ -160,25 +160,44 @@ func (b *RedisInventoryBuffer) FlushBatch(ctx context.Context) (int, error) {
 	totalPending, _ := b.Count(ctx)
 	log.Printf("[RedisInventoryBuffer] Flushing %d/%d items", len(userIDs), totalPending)
 
+	// Optimize: Use HMGet to fetch all items in one round trip instead of Loop * HGet
+	// Since all items are in the same Hash (b.bufferKey()), HMGet is ideal.
+	// userIDs is []string, but HMGet expects ...string
+	values, err := b.client.HMGet(ctx, b.bufferKey(), userIDs...).Result()
+	if err != nil {
+		return 0, err
+	}
+
 	items := make([]*model.BufferedInventory, 0, len(userIDs))
 	originalData := make(map[string]string)
 
-	for _, userID := range userIDs {
-		data, err := b.client.HGet(ctx, b.bufferKey(), userID).Bytes()
-		if err == redis.Nil {
+	for i, val := range values {
+		userID := userIDs[i]
+		
+		// val is interface{}, can be nil if key missing
+		if val == nil {
+			// Item missing from hash but present in set? Clean up set.
 			b.client.SRem(ctx, b.pendingKey(), userID)
 			continue
 		}
-		if err != nil {
-			log.Printf("[RedisInventoryBuffer] Error getting %s: %v", userID, err)
+
+		var dataStr string
+		switch v := val.(type) {
+		case string:
+			dataStr = v
+		case []byte:
+			dataStr = string(v)
+		default:
+			log.Printf("[RedisInventoryBuffer] Check: unexpected type for %s: %T", userID, v)
 			continue
 		}
 
-		originalData[userID] = string(data)
+		originalData[userID] = dataStr
 
 		var inv model.BufferedInventory
-		if err := json.Unmarshal(data, &inv); err != nil {
+		if err := json.Unmarshal([]byte(dataStr), &inv); err != nil {
 			log.Printf("[RedisInventoryBuffer] Error unmarshaling %s: %v", userID, err)
+			// Corrupt data, remove from Redis
 			b.client.HDel(ctx, b.bufferKey(), userID)
 			b.client.SRem(ctx, b.pendingKey(), userID)
 			continue
@@ -229,18 +248,32 @@ func (b *RedisInventoryBuffer) CleanupStale(ctx context.Context) (int, error) {
 	staleCount := 0
 	pipe := b.client.Pipeline()
 
-	for _, userID := range userIDs {
-		data, err := b.client.HGet(ctx, b.bufferKey(), userID).Bytes()
-		if err == redis.Nil {
+	// Optimize: Use HMGet to fetch all items in one round trip
+	values, err := b.client.HMGet(ctx, b.bufferKey(), userIDs...).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	for i, val := range values {
+		userID := userIDs[i]
+
+		if val == nil {
 			pipe.SRem(ctx, b.pendingKey(), userID)
 			continue
 		}
-		if err != nil {
+
+		var dataStr string
+		switch v := val.(type) {
+		case string:
+			dataStr = v
+		case []byte:
+			dataStr = string(v)
+		default:
 			continue
 		}
 
 		var inv model.BufferedInventory
-		if err := json.Unmarshal(data, &inv); err != nil {
+		if err := json.Unmarshal([]byte(dataStr), &inv); err != nil {
 			pipe.HDel(ctx, b.bufferKey(), userID)
 			pipe.SRem(ctx, b.pendingKey(), userID)
 			staleCount++
