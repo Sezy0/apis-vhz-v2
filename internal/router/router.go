@@ -57,6 +57,7 @@ func New(cfg Config) *chi.Mux {
 		// PUBLIC ROUTES
 		if cfg.ObfuscationHandler != nil {
 			r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
+			r.Get("/obfuscate/status/{jobID}", cfg.ObfuscationHandler.GetObfuscationStatus)
 		}
 		
 		// Public Log Routes (for now, or move to Admin if intended for admins only)

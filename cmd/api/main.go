@@ -185,7 +185,7 @@ func main() {
 		defer logRepo.Close()
 	}
 
-	obfuscationHandler := handler.NewObfuscationHandler(foxzyPath, fileUploaderURL, logRepo)
+	obfuscationHandler := handler.NewObfuscationHandler(foxzyPath, fileUploaderURL, logRepo, redisClient)
 
 	// Initialize log handler
 	logHandler := handler.NewLogHandler(logRepo, inventoryService)

@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 	"vinzhub-rest-api-v2/internal/model"
 	"vinzhub-rest-api-v2/internal/repository"
 	"vinzhub-rest-api-v2/pkg/apierror"
@@ -23,14 +25,16 @@ type ObfuscationHandler struct {
 	FoxzyPath       string // Path to Foxzy-Obfuscator directory
 	FileUploaderURL string // URL of file-uploader service
 	LogRepo         repository.LogRepository
+	Redis           *redis.Client
 }
 
 // NewObfuscationHandler creates a new obfuscation handler
-func NewObfuscationHandler(foxzyPath, fileUploaderURL string, logRepo repository.LogRepository) *ObfuscationHandler {
+func NewObfuscationHandler(foxzyPath, fileUploaderURL string, logRepo repository.LogRepository, redisClient *redis.Client) *ObfuscationHandler {
 	return &ObfuscationHandler{
 		FoxzyPath:       foxzyPath,
 		FileUploaderURL: fileUploaderURL,
 		LogRepo:         logRepo,
+		Redis:           redisClient,
 	}
 }
 
@@ -138,109 +142,157 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, apierror.BadRequest("Content is required"))
 		return
 	}
-	
-	// Create temp files
-	tmpDir := os.TempDir()
-	inputFile := filepath.Join(tmpDir, fmt.Sprintf("foxzy_input_%d.lua", time.Now().UnixNano()))
-	outputFile := filepath.Join(tmpDir, fmt.Sprintf("foxzy_output_%d.lua", time.Now().UnixNano()))
-	
-	// Write input
-	if err := os.WriteFile(inputFile, []byte(req.Content), 0644); err != nil {
-		response.Error(w, apierror.InternalError("Failed to create temp file"))
+
+	// Generate Job ID
+	jobID := fmt.Sprintf("job_%d_%s", time.Now().UnixNano(), "foxzy") // Simple ID
+	// Verify Redis connection
+	if h.Redis == nil {
+		response.Error(w, apierror.InternalError("Redis unavailable for async processing"))
 		return
 	}
-	defer os.Remove(inputFile)
-	defer os.Remove(outputFile)
 
-	var cmd *exec.Cmd
-	var configFile string
+	// Set initial status
+	initialStatus := map[string]interface{}{
+		"status": "processing",
+		"ts":     time.Now().Unix(),
+	}
+	statusJSON, _ := json.Marshal(initialStatus)
+	h.Redis.Set(r.Context(), "obs_job:"+jobID, statusJSON, 15*time.Minute)
 
-	if req.CustomConfig != nil {
-		// Custom Configuration Mode
-		var err error
-		configFile, err = h.generateCustomConfig(req.CustomConfig)
-		if err != nil {
-			response.Error(w, apierror.InternalError("Failed to generate custom config"))
-			return
-		}
-		defer os.Remove(configFile)
+	// Launch background process
+	go func() {
+		// Create Background Context for Redis operations inside goroutine
+		bgCtx := context.Background()
 
-		cmd = exec.Command("lua", "cli.lua", "--config", configFile, "--Lua51", "--out", outputFile, inputFile)
-	} else {
-		// Preset Mode
-		// Validate preset - available Foxzy presets
-		validPresets := map[string]bool{
-			"Minify":        true,
-			"FoxzyLight":    true,
-			"FoxzyBalanced": true,
-			"FoxzyMax":      true,
-			"FoxzyMaxCF":    true,
-		}
+		// Create temp files
+		tmpDir := os.TempDir()
+		inputFile := filepath.Join(tmpDir, fmt.Sprintf("foxzy_input_%s.lua", jobID))
+		outputFile := filepath.Join(tmpDir, fmt.Sprintf("foxzy_output_%s.lua", jobID))
 		
-		if req.Preset == "" {
-			req.Preset = "FoxzyBalanced"
-		}
-		
-		if !validPresets[req.Preset] {
-			response.Error(w, apierror.BadRequest("Invalid preset"))
+		defer os.Remove(inputFile)
+		defer os.Remove(outputFile)
+
+		// Write input
+		if err := os.WriteFile(inputFile, []byte(req.Content), 0644); err != nil {
+			h.updateJobStatus(bgCtx, jobID, "failed", "", "", fmt.Sprintf("Write error: %v", err))
 			return
 		}
 
-		cmd = exec.Command("lua", "cli.lua", "--preset", req.Preset, "--Lua51", "--out", outputFile, inputFile)
-	}
-	
-	// Run Foxzy
-	cmd.Dir = h.FoxzyPath
-	
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	
-	if err := cmd.Run(); err != nil {
-		ip := r.Header.Get("X-Forwarded-For")
-		if ip == "" { ip = r.RemoteAddr }
-		h.insertLog(req, ip, int64(len(req.Content)), 0, "failed", stderr.String(), time.Since(startTime).Milliseconds())
+		var cmd *exec.Cmd
+		var configFile string
 
-		response.Error(w, apierror.InternalError(fmt.Sprintf("Obfuscation failed: %s", stderr.String())))
-		return
-	}
+		if req.CustomConfig != nil {
+			// Custom Configuration Mode
+			var err error
+			configFile, err = h.generateCustomConfig(req.CustomConfig)
+			if err != nil {
+				h.updateJobStatus(bgCtx, jobID, "failed", "", "", fmt.Sprintf("Config error: %v", err))
+				return
+			}
+			defer os.Remove(configFile)
+
+			cmd = exec.Command("lua", "cli.lua", "--config", configFile, "--Lua51", "--out", outputFile, inputFile)
+		} else {
+			// Preset Mode
+			validPresets := map[string]bool{
+				"Minify":        true,
+				"FoxzyLight":    true,
+				"FoxzyBalanced": true,
+				"FoxzyMax":      true,
+				"FoxzyMaxCF":    true,
+			}
+			
+			if req.Preset == "" {
+				req.Preset = "FoxzyBalanced"
+			}
+			
+			if !validPresets[req.Preset] {
+				h.updateJobStatus(bgCtx, jobID, "failed", "", "", "Invalid preset")
+				return
+			}
+
+			cmd = exec.Command("lua", "cli.lua", "--preset", req.Preset, "--Lua51", "--out", outputFile, inputFile)
+		}
+		
+		// Run Foxzy
+		cmd.Dir = h.FoxzyPath
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		
+		if err := cmd.Run(); err != nil {
+			ip := r.Header.Get("X-Forwarded-For")
+			if ip == "" { ip = r.RemoteAddr }
+			h.insertLog(req, ip, int64(len(req.Content)), 0, "failed", stderr.String(), time.Since(startTime).Milliseconds())
+
+			h.updateJobStatus(bgCtx, jobID, "failed", "", "", fmt.Sprintf("Obfuscation error: %s", stderr.String()))
+			return
+		}
+
 		// Read output
-	obfuscated, err := os.ReadFile(outputFile)
-	if err != nil {
+		obfuscated, err := os.ReadFile(outputFile)
+		if err != nil {
+			h.updateJobStatus(bgCtx, jobID, "failed", "", "", "Failed to check output file")
+			return
+		}
+
+		processTime := time.Since(startTime).Milliseconds()
+		
+		// Upload to file-uploader if URL is configured
+		var resultURL string
+		if h.FileUploaderURL != "" {
+			var errUpload error
+			_, resultURL, errUpload = h.uploadToFileUploader(string(obfuscated), req.Filename)
+			if errUpload != nil {
+				fmt.Printf("File upload failed: %v", errUpload)
+			}
+		}
+		
+		// Log success
 		ip := r.Header.Get("X-Forwarded-For")
 		if ip == "" { ip = r.RemoteAddr }
-		h.insertLog(req, ip, int64(len(req.Content)), 0, "failed", "Read output failed", time.Since(startTime).Milliseconds())
+		h.insertLog(req, ip, int64(len(req.Content)), int64(len(obfuscated)), "success", "", processTime)
 
-		response.Error(w, apierror.InternalError("Failed to read obfuscated output"))
+		// Update Job to Success
+		h.updateJobStatus(bgCtx, jobID, "success", string(obfuscated), resultURL, "")
+	}()
+
+	response.OK(w, map[string]string{
+		"message": "Obfuscation started",
+		"job_id":  jobID,
+		"status":  "processing",
+	})
+}
+
+// updateJobStatus helper to update Redis
+func (h *ObfuscationHandler) updateJobStatus(ctx context.Context, jobID, status, content, resultURL, errorMsg string) {
+	data := map[string]interface{}{
+		"status":     status,
+		"content":    content,
+		"result_url": resultURL,
+		"error":      errorMsg,
+		"ts":         time.Now().Unix(),
+	}
+	jsonBytes, _ := json.Marshal(data)
+	h.Redis.Set(ctx, "obs_job:"+jobID, jsonBytes, 15*time.Minute)
+}
+
+// GetObfuscationStatus handles GET /api/v1/obfuscate/status/{jobID}
+func (h *ObfuscationHandler) GetObfuscationStatus(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+	
+	val, err := h.Redis.Get(r.Context(), "obs_job:"+jobID).Result()
+	if err == redis.Nil {
+		response.Error(w, apierror.NotFound("Job not found"))
+		return
+	} else if err != nil {
+		response.Error(w, apierror.InternalError("Redis error"))
 		return
 	}
 
-	processTime := time.Since(startTime).Milliseconds()
+	var data map[string]interface{}
+	json.Unmarshal([]byte(val), &data)
 	
-	// Upload to file-uploader if URL is configured
-	var slug string
-	var resultURL string
-	if h.FileUploaderURL != "" {
-		slug, resultURL, err = h.uploadToFileUploader(string(obfuscated), req.Filename)
-		if err != nil {
-			// Log error but don't fail - return content directly
-			fmt.Printf("Failed to upload to file-uploader: %v\n", err)
-		}
-	}
-	
-	// Log success
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip == "" { ip = r.RemoteAddr }
-	h.insertLog(req, ip, int64(len(req.Content)), int64(len(obfuscated)), "success", "", processTime)
-
-	resp := ObfuscateResponse{
-		Success:     true,
-		Slug:        slug,
-		ResultURL:   resultURL,
-		Content:     string(obfuscated),
-		ProcessTime: processTime,
-	}
-	
-	response.OK(w, resp)
+	response.OK(w, data)
 }
 
 // uploadToFileUploader uploads obfuscated content to file-uploader service
