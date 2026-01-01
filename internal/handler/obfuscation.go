@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,13 +20,15 @@ import (
 type ObfuscationHandler struct {
 	FoxzyPath       string // Path to Foxzy-Obfuscator directory
 	FileUploaderURL string // URL of file-uploader service
+	DB              *sql.DB
 }
 
 // NewObfuscationHandler creates a new obfuscation handler
-func NewObfuscationHandler(foxzyPath, fileUploaderURL string) *ObfuscationHandler {
+func NewObfuscationHandler(foxzyPath, fileUploaderURL string, db *sql.DB) *ObfuscationHandler {
 	return &ObfuscationHandler{
 		FoxzyPath:       foxzyPath,
 		FileUploaderURL: fileUploaderURL,
+		DB:              db,
 	}
 }
 
@@ -156,13 +159,20 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = &stderr
 	
 	if err := cmd.Run(); err != nil {
+		ip := r.Header.Get("X-Forwarded-For")
+		if ip == "" { ip = r.RemoteAddr }
+		h.insertLog(req, ip, int64(len(req.Content)), 0, "failed", stderr.String(), time.Since(startTime).Milliseconds())
+
 		response.Error(w, apierror.InternalError(fmt.Sprintf("Obfuscation failed: %s", stderr.String())))
 		return
 	}
-	
-	// Read output
+		// Read output
 	obfuscated, err := os.ReadFile(outputFile)
 	if err != nil {
+		ip := r.Header.Get("X-Forwarded-For")
+		if ip == "" { ip = r.RemoteAddr }
+		h.insertLog(req, ip, int64(len(req.Content)), 0, "failed", "Read output failed", time.Since(startTime).Milliseconds())
+
 		response.Error(w, apierror.InternalError("Failed to read obfuscated output"))
 		return
 	}
@@ -180,6 +190,11 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+	// Log success
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" { ip = r.RemoteAddr }
+	h.insertLog(req, ip, int64(len(req.Content)), int64(len(obfuscated)), "success", "", processTime)
+
 	resp := ObfuscateResponse{
 		Success:     true,
 		Slug:        slug,
@@ -230,4 +245,34 @@ func (h *ObfuscationHandler) uploadToFileUploader(content string, filename strin
 	}
 	
 	return result.Slug, result.URL, nil
+}
+
+// insertLog records the obfuscation attempt asynchronously
+func (h *ObfuscationHandler) insertLog(req ObfuscateRequest, ip string, sizeIn, sizeOut int64, status, errorMsg string, durationMs int64) {
+	if h.DB == nil {
+		return
+	}
+
+	go func() {
+		query := `
+			INSERT INTO obfuscation_logs (
+				ip_address, file_name, file_size_in, file_size_out, preset_used, 
+				status, error_message, execution_time_ms
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`
+		
+		preset := req.Preset
+		if req.CustomConfig != nil {
+			preset = "Custom"
+		}
+
+		_, err := h.DB.Exec(query, 
+			ip, req.Filename, sizeIn, sizeOut, preset, 
+			status, errorMsg, durationMs,
+		)
+		
+		if err != nil {
+			fmt.Printf("Failed to insert obfuscation log: %v\n", err)
+		}
+	}()
 }

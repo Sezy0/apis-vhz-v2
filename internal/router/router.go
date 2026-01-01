@@ -17,6 +17,7 @@ type Config struct {
 	AdminHandler        *handler.AdminHandler
 	AuthHandler         *handler.AuthHandler
 	ObfuscationHandler  *handler.ObfuscationHandler
+	LogHandler          *handler.LogHandler
 	AuthMiddleware      func(http.Handler) http.Handler
 }
 
@@ -56,6 +57,14 @@ func New(cfg Config) *chi.Mux {
 		// PUBLIC ROUTES
 		if cfg.ObfuscationHandler != nil {
 			r.Post("/obfuscate", cfg.ObfuscationHandler.Obfuscate)
+		}
+		
+		// Public Log Routes (for now, or move to Admin if intended for admins only)
+		if cfg.LogHandler != nil {
+			r.Route("/logs", func(r chi.Router) {
+				r.Get("/obfuscation", cfg.LogHandler.GetObfuscationLogs)
+				r.Get("/inventory", cfg.LogHandler.GetInventoryLogs)
+			})
 		}
 
 		// AUTHENTICATED ROUTES

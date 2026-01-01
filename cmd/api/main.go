@@ -165,7 +165,10 @@ func main() {
 		foxzyPath = "/opt/foxzy"
 	}
 	fileUploaderURL := os.Getenv("FILE_UPLOADER_URL")
-	obfuscationHandler := handler.NewObfuscationHandler(foxzyPath, fileUploaderURL)
+	obfuscationHandler := handler.NewObfuscationHandler(foxzyPath, fileUploaderURL, mysqlDB)
+
+	// Initialize log handler
+	logHandler := handler.NewLogHandler(mysqlDB, inventoryService)
 
 	// Create router
 	r := router.New(router.Config{
@@ -174,6 +177,7 @@ func main() {
 		AdminHandler:       adminHandler,
 		AuthHandler:        authHandler,
 		ObfuscationHandler: obfuscationHandler,
+		LogHandler:         logHandler,
 		AuthMiddleware:     authMiddleware,
 	})
 
