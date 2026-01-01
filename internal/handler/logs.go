@@ -1,31 +1,31 @@
 package handler
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
 	
+	"vinzhub-rest-api-v2/internal/repository"
 	"vinzhub-rest-api-v2/internal/service"
 	"vinzhub-rest-api-v2/pkg/apierror"
 	"vinzhub-rest-api-v2/pkg/response"
 )
 
 type LogHandler struct {
-	DB               *sql.DB
+	LogRepo          repository.LogRepository
 	InventoryService *service.InventoryService
 }
 
-func NewLogHandler(db *sql.DB, inventoryService *service.InventoryService) *LogHandler {
+func NewLogHandler(logRepo repository.LogRepository, inventoryService *service.InventoryService) *LogHandler {
 	return &LogHandler{
-		DB:               db,
+		LogRepo:          logRepo,
 		InventoryService: inventoryService,
 	}
 }
 
 // GetObfuscationLogs returns paginated obfuscation logs
 func (h *LogHandler) GetObfuscationLogs(w http.ResponseWriter, r *http.Request) {
-	if h.DB == nil {
-		response.Error(w, apierror.InternalError("Database connection unavailable"))
+	if h.LogRepo == nil {
+		response.Error(w, apierror.InternalError("Log repository unavailable"))
 		return
 	}
 
@@ -35,51 +35,16 @@ func (h *LogHandler) GetObfuscationLogs(w http.ResponseWriter, r *http.Request) 
 	if limit < 1 || limit > 100 { limit = 20 }
 	offset := (page - 1) * limit
 
-	rows, err := h.DB.Query(`
-		SELECT id, ip_address, file_name, file_size_in, file_size_out, preset_used, status, error_message, execution_time_ms, created_at 
-		FROM obfuscation_logs 
-		ORDER BY created_at DESC 
-		LIMIT ? OFFSET ?`, limit, offset)
+	logs, count, err := h.LogRepo.GetObfuscationLogs(r.Context(), limit, offset)
 	
 	if err != nil {
 		response.Error(w, apierror.InternalError("Failed to fetch logs"))
 		return
 	}
-	defer rows.Close()
-
-	type LogEntry struct {
-		ID              int64  `json:"id"`
-		IPAddress       string `json:"ip_address"`
-		FileName        string `json:"file_name"`
-		FileSizeIn      int64  `json:"file_size_in"`
-		FileSizeOut     int64  `json:"file_size_out"`
-		PresetUsed      string `json:"preset_used"`
-		Status          string `json:"status"`
-		ErrorMessage    string `json:"error_message,omitempty"`
-		ExecutionTimeMs int64  `json:"execution_time_ms"`
-		CreatedAt       string `json:"created_at"`
-	}
-
-	logs := []LogEntry{}
-	for rows.Next() {
-		var l LogEntry
-		var errMsg sql.NullString
-		if err := rows.Scan(&l.ID, &l.IPAddress, &l.FileName, &l.FileSizeIn, &l.FileSizeOut, &l.PresetUsed, &l.Status, &errMsg, &l.ExecutionTimeMs, &l.CreatedAt); err != nil {
-			continue
-		}
-		if errMsg.Valid {
-			l.ErrorMessage = errMsg.String
-		}
-		logs = append(logs, l)
-	}
-
-	// Get total count
-	var total int
-	h.DB.QueryRow("SELECT COUNT(*) FROM obfuscation_logs").Scan(&total)
-
+	
 	response.OK(w, map[string]interface{}{
 		"data":  logs,
-		"total": total,
+		"total": count,
 		"page":  page,
 		"limit": limit,
 	})

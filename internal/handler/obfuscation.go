@@ -2,7 +2,7 @@ package handler
 
 import (
 	"bytes"
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"vinzhub-rest-api-v2/internal/model"
+	"vinzhub-rest-api-v2/internal/repository"
 	"vinzhub-rest-api-v2/pkg/apierror"
 	"vinzhub-rest-api-v2/pkg/response"
 )
@@ -20,16 +22,51 @@ import (
 type ObfuscationHandler struct {
 	FoxzyPath       string // Path to Foxzy-Obfuscator directory
 	FileUploaderURL string // URL of file-uploader service
-	DB              *sql.DB
+	LogRepo         repository.LogRepository
 }
 
 // NewObfuscationHandler creates a new obfuscation handler
-func NewObfuscationHandler(foxzyPath, fileUploaderURL string, db *sql.DB) *ObfuscationHandler {
+func NewObfuscationHandler(foxzyPath, fileUploaderURL string, logRepo repository.LogRepository) *ObfuscationHandler {
 	return &ObfuscationHandler{
 		FoxzyPath:       foxzyPath,
 		FileUploaderURL: fileUploaderURL,
-		DB:              db,
+		LogRepo:         logRepo,
 	}
+}
+
+// ... existing code ...
+
+// insertLog records the obfuscation attempt asynchronously
+func (h *ObfuscationHandler) insertLog(req ObfuscateRequest, ip string, sizeIn, sizeOut int64, status, errorMsg string, durationMs int64) {
+	if h.LogRepo == nil {
+		return
+	}
+
+	go func() {
+		preset := req.Preset
+		if req.CustomConfig != nil {
+			preset = "Custom"
+		}
+
+		logEntry := &model.ObfuscationLog{
+			IPAddress:       ip,
+			FileName:        req.Filename,
+			FileSizeIn:      sizeIn,
+			FileSizeOut:     sizeOut,
+			PresetUsed:      preset,
+			Status:          status,
+			ErrorMessage:    errorMsg,
+			ExecutionTimeMs: durationMs,
+			CreatedAt:       time.Now(),
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.LogRepo.InsertObfuscationLog(ctx, logEntry); err != nil {
+			fmt.Printf("Failed to insert obfuscation log: %v\n", err)
+		}
+	}()
 }
 
 // CustomConfig defines custom obfuscation settings
@@ -247,32 +284,4 @@ func (h *ObfuscationHandler) uploadToFileUploader(content string, filename strin
 	return result.Slug, result.URL, nil
 }
 
-// insertLog records the obfuscation attempt asynchronously
-func (h *ObfuscationHandler) insertLog(req ObfuscateRequest, ip string, sizeIn, sizeOut int64, status, errorMsg string, durationMs int64) {
-	if h.DB == nil {
-		return
-	}
 
-	go func() {
-		query := `
-			INSERT INTO obfuscation_logs (
-				ip_address, file_name, file_size_in, file_size_out, preset_used, 
-				status, error_message, execution_time_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`
-		
-		preset := req.Preset
-		if req.CustomConfig != nil {
-			preset = "Custom"
-		}
-
-		_, err := h.DB.Exec(query, 
-			ip, req.Filename, sizeIn, sizeOut, preset, 
-			status, errorMsg, durationMs,
-		)
-		
-		if err != nil {
-			fmt.Printf("Failed to insert obfuscation log: %v\n", err)
-		}
-	}()
-}
