@@ -128,27 +128,13 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 		cmd = exec.Command("lua", "cli.lua", "--config", configFile, "--Lua51", "--out", outputFile, inputFile)
 	} else {
 		// Preset Mode
-		// Validate preset - all available Foxzy presets
+		// Validate preset - available Foxzy presets
 		validPresets := map[string]bool{
-			"Minify":            true,
-			"FoxzyLight":        true,
-			"FoxzyBalanced":     true,
-			"FoxzyMax":          true,
-			"FoxzyMaxCF":        true,
-			"FoxzyUltimate":     true,
-			"FoxzyInsane":       true,
-			"FoxzyLuraph":       true,
-			"FoxzyApocalypse":   true,
-			"FoxzyHardcore":     true,
-			"FoxzyPerformance":  true,
-			"FoxzyCompact":      true,
-			"FoxzyMini":         true,
-			"FoxzySafe":         true,
-			"FoxzyConfusion":    true,
-			"FoxzyStringMax":    true,
-			"FoxzyAntiAnalysis": true,
-			"FoxzyPacked":       true,
-			"FoxzyRoblox":       true,
+			"Minify":        true,
+			"FoxzyLight":    true,
+			"FoxzyBalanced": true,
+			"FoxzyMax":      true,
+			"FoxzyMaxCF":    true,
 		}
 		
 		if req.Preset == "" {
