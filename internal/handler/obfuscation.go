@@ -214,16 +214,24 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 			cmd = exec.Command("lua", "cli.lua", "--preset", req.Preset, "--Lua51", "--out", outputFile, inputFile)
 		}
 		
+
 		// Run Foxzy
 		cmd.Dir = h.FoxzyPath
 		var stderr bytes.Buffer
+		var stdout bytes.Buffer
 		cmd.Stderr = &stderr
+		cmd.Stdout = &stdout
 		
+		fmt.Printf("Running Foxzy: %v \nInput: %s\nOutput: %s\n", cmd.Args, inputFile, outputFile)
+
 		if err := cmd.Run(); err != nil {
 			ip := r.Header.Get("X-Forwarded-For")
 			if ip == "" { ip = r.RemoteAddr }
 			h.insertLog(req, ip, int64(len(req.Content)), 0, "failed", stderr.String(), time.Since(startTime).Milliseconds())
 
+			// Log detailed error
+			fmt.Printf("Foxzy Failed: %v\nStderr: %s\nStdout: %s\n", err, stderr.String(), stdout.String())
+			
 			h.updateJobStatus(bgCtx, jobID, "failed", "", "", fmt.Sprintf("Obfuscation error: %s", stderr.String()))
 			return
 		}
@@ -231,7 +239,14 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 		// Read output
 		obfuscated, err := os.ReadFile(outputFile)
 		if err != nil {
-			h.updateJobStatus(bgCtx, jobID, "failed", "", "", "Failed to check output file")
+			h.updateJobStatus(bgCtx, jobID, "failed", "", "", "Failed to read output file")
+			return
+		}
+
+		// Check if output is empty
+		if len(obfuscated) == 0 {
+			fmt.Printf("Foxzy output file is empty!\nStderr: %s\nStdout: %s\n", stderr.String(), stdout.String())
+			h.updateJobStatus(bgCtx, jobID, "failed", "", "", "Obfuscation generated empty file")
 			return
 		}
 
@@ -243,7 +258,7 @@ func (h *ObfuscationHandler) Obfuscate(w http.ResponseWriter, r *http.Request) {
 			var errUpload error
 			_, resultURL, errUpload = h.uploadToFileUploader(string(obfuscated), req.Filename)
 			if errUpload != nil {
-				fmt.Printf("File upload failed: %v", errUpload)
+				fmt.Printf("File upload failed: %v\n", errUpload)
 			}
 		}
 		
